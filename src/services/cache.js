@@ -12,28 +12,12 @@ class CacheService {
     // Log cache events in development
     if (config.server.nodeEnv === 'development') {
       this.cache.on('expired', (key, _value) => {
-        const normalizedKey = this.normalizeKey(key);
-        console.log(`[CACHE EXPIRED] key: ${normalizedKey}`);
+        console.log(`[CACHE EXPIRED] key: ${key}`);
       });
     }
   }
 
-  /**
-   * Normalize the cache key to always include '/api' prefix if not present
-   * @param {string} key - The cache key
-   * @returns {string} Normalized cache key
-   */
-  normalizeKey(key) {
-    if (!key.startsWith('/api/')) {
-      // If it starts with '/api', leave as is; otherwise, add '/api' prefix
-      if (key.startsWith('/')) {
-        return `/api${key}`;
-      } else {
-        return `/api/${key}`;
-      }
-    }
-    return key;
-  }
+
 
   /**
    * Get a value from cache
@@ -41,10 +25,9 @@ class CacheService {
    * @returns {*} Cached value or undefined if not found
    */
   get(key) {
-    const normalizedKey = this.normalizeKey(key);
-    const value = this.cache.get(normalizedKey);
+    const value = this.cache.get(key);
     if (config.server.nodeEnv === 'development') {
-      console.log(`[CACHE GET] key: ${normalizedKey} | hit: ${value !== undefined}`);
+      console.log(`[CACHE GET] key: ${key} | hit: ${value !== undefined}`);
     }
     return value;
   }
@@ -56,11 +39,10 @@ class CacheService {
    * @param {number} ttl - Time to live in seconds (optional, uses default if not provided)
    */
   set(key, value, ttl = null) {
-    const normalizedKey = this.normalizeKey(key);
     const cacheTtl = ttl || config.cache.ttl;
-    this.cache.set(normalizedKey, value, cacheTtl);
+    this.cache.set(key, value, cacheTtl);
     if (config.server.nodeEnv === 'development') {
-      console.log(`[CACHE SET] key: ${normalizedKey} | ttl: ${cacheTtl}`);
+      console.log(`[CACHE SET] key: ${key} | ttl: ${cacheTtl}`);
     }
   }
 
@@ -98,8 +80,7 @@ class CacheService {
       .sort()
       .map(key => `${key}=${params[key]}`)
       .join('&');
-    // Always use the normalized endpoint for the cache key
-    return this.normalizeKey(`${endpoint}${sortedParams ? `?${sortedParams}` : ''}`);
+    return `${endpoint}${sortedParams ? `?${sortedParams}` : ''}`;
   }
 }
 
