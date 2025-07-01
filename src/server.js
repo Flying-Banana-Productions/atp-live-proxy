@@ -10,6 +10,7 @@ const config = require('./config');
 const apiRoutes = require('./routes/api');
 const cacheRoutes = require('./routes/cache');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
+const webSocketServer = require('./websocket');
 
 // Import Swagger specs
 const swaggerSpecs = require('./swagger');
@@ -112,12 +113,17 @@ if (process.env.NODE_ENV !== 'test') {
     console.log(`💚 Health Check: http://localhost:${PORT}/api/health`);
     console.log(`📖 Swagger Docs: http://localhost:${PORT}/api-docs`);
     console.log(`⚙️  Cache Config: http://localhost:${PORT}/api/cache/config`);
+    console.log(`🔌 WebSocket: ws://localhost:${PORT}`);
   });
+
+  // Initialize WebSocket server
+  webSocketServer.initialize(server);
 }
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully');
+  webSocketServer.stop();
   if (server) {
     server.close(() => {
       console.log('Server closed');
@@ -130,6 +136,7 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
   console.log('SIGINT received, shutting down gracefully');
+  webSocketServer.stop();
   if (server) {
     server.close(() => {
       console.log('Server closed');

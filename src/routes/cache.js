@@ -1,6 +1,7 @@
 const express = require('express');
 const cacheService = require('../services/cache');
 const config = require('../config');
+const webSocketServer = require('../websocket');
 
 const router = express.Router();
 
@@ -64,6 +65,43 @@ router.get('/cache/config', (req, res) => {
   });
 });
 
-
+/**
+ * @swagger
+ * /api/cache/websocket:
+ *   get:
+ *     summary: Get WebSocket statistics
+ *     description: Retrieve statistics about WebSocket connections and subscriptions
+ *     tags: [Cache]
+ *     responses:
+ *       200:
+ *         description: WebSocket statistics retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 connected:
+ *                   type: boolean
+ *                   description: Whether WebSocket server is running
+ *                 connectedSockets:
+ *                   type: integer
+ *                   description: Number of connected WebSocket clients
+ *                 subscriptions:
+ *                   type: object
+ *                   description: Subscription statistics
+ *                 polling:
+ *                   type: object
+ *                   description: Polling service statistics
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ */
+router.get('/cache/websocket', (req, res) => {
+  const stats = webSocketServer.getStats();
+  res.json({
+    ...stats,
+    timestamp: new Date().toISOString(),
+  });
+});
 
 module.exports = router; 

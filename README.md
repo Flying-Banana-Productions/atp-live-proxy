@@ -6,6 +6,7 @@ A Node.js proxy server with Express for the ATP (Association of Tennis Professio
 
 - 🏆 **Complete ATP API Proxy**: Proxies all endpoints from the official ATP API with Bearer token authentication
 - ⚡ **In-Memory Caching**: Endpoint-specific cache timeouts optimized for different data types
+- 🔌 **Real-time WebSocket Updates**: Optional WebSocket support for real-time data streaming
 - 🔒 **Security**: Helmet.js security headers, CORS, and rate limiting
 - 📊 **Monitoring**: Health checks, cache statistics, and comprehensive logging
 - 🚀 **Performance**: Response compression and optimized request handling
@@ -152,6 +153,7 @@ Visit `http://localhost:3000/api-docs` in your browser to access the interactive
 | `/api/info` | GET | API information and documentation |
 | `/api/cache/stats` | GET | Cache statistics |
 | `/api/cache/config` | GET | Cache configuration (including TTL values) |
+| `/api/cache/websocket` | GET | WebSocket statistics |
 | `/api/cache` | DELETE | Clear all cache |
 | `/api-docs` | GET | Interactive Swagger documentation |
 
@@ -217,6 +219,121 @@ Open your browser and navigate to:
 ```
 http://localhost:3000/api-docs
 ```
+
+### Test WebSocket Functionality
+Open the test client in your browser:
+```
+websocket-test.html
+```
+
+## WebSocket API
+
+The proxy supports real-time data streaming via WebSocket connections. Clients can subscribe to specific endpoints and receive automatic updates when data changes.
+
+### Connection
+```javascript
+const socket = io('http://localhost:3000');
+```
+
+### Events
+
+#### Client to Server
+- `subscribe` - Subscribe to endpoint(s)
+  ```javascript
+  socket.emit('subscribe', '/api/live-matches');
+  socket.emit('subscribe', ['/api/live-matches', '/api/draws/live']);
+  ```
+
+- `unsubscribe` - Unsubscribe from endpoint(s)
+  ```javascript
+  socket.emit('unsubscribe', '/api/live-matches');
+  socket.emit('unsubscribe', ['/api/live-matches', '/api/draws/live']);
+  ```
+
+- `get-subscriptions` - Get current subscriptions
+  ```javascript
+  socket.emit('get-subscriptions');
+  ```
+
+- `get-data` - Request immediate data for an endpoint
+  ```javascript
+  socket.emit('get-data', '/api/live-matches');
+  ```
+
+#### Server to Client
+- `connected` - Connection established
+  ```javascript
+  {
+    message: 'Connected to ATP Live Proxy WebSocket',
+    socketId: 'socket-id',
+    timestamp: '2024-01-15T10:30:00.000Z',
+    availableEndpoints: ['/api/live-matches', '/api/draws/live', ...]
+  }
+  ```
+
+- `subscribed` - Successfully subscribed to endpoint
+  ```javascript
+  {
+    endpoint: '/api/live-matches',
+    message: 'Subscribed to /api/live-matches',
+    timestamp: '2024-01-15T10:30:00.000Z'
+  }
+  ```
+
+- `unsubscribed` - Successfully unsubscribed from endpoint
+  ```javascript
+  {
+    endpoint: '/api/live-matches',
+    message: 'Unsubscribed from /api/live-matches',
+    timestamp: '2024-01-15T10:30:00.000Z'
+  }
+  ```
+
+- `subscriptions` - Current subscription list
+  ```javascript
+  {
+    subscriptions: ['/api/live-matches', '/api/draws/live'],
+    timestamp: '2024-01-15T10:30:00.000Z'
+  }
+  ```
+
+- `data-update` - Real-time data update
+  ```javascript
+  {
+    endpoint: '/api/live-matches',
+    data: { /* API response data */ },
+    cached: false,
+    timestamp: '2024-01-15T10:30:00.000Z',
+    ttl: 10
+  }
+  ```
+
+- `error` - Error message
+  ```javascript
+  {
+    message: 'Invalid endpoint: /api/invalid',
+    timestamp: '2024-01-15T10:30:00.000Z'
+  }
+  ```
+
+### WebSocket Features
+
+- **Real-time Updates**: Server polls ATP API at configured TTL intervals and broadcasts updates
+- **Same Response Format**: WebSocket messages match REST API response structure
+- **Automatic Reconnection**: Socket.io handles connection drops and reconnection
+- **Subscription Management**: Subscribe/unsubscribe to specific endpoints
+- **Immediate Data**: Request cached data immediately upon subscription
+- **Connection Statistics**: Monitor WebSocket connections via `/api/cache/websocket`
+
+### Supported Endpoints for WebSocket
+
+- `/api/live-matches` - Live matches and scores (10s TTL)
+- `/api/draws/live` - Live draw with unpublished results (10m TTL)
+- `/api/draws` - Tournament draw (10m TTL)
+- `/api/player-list` - Tournament player list (10m TTL)
+- `/api/results` - Completed match results (3m TTL)
+- `/api/schedules` - Tournament schedule (10m TTL)
+- `/api/team-cup-rankings` - ATP Cup team rankings (10m TTL)
 
 ## Response Format
 

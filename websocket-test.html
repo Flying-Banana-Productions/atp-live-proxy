@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATP Live Proxy - WebSocket Test Client</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        .connected { background-color: #d4edda; color: #155724; }
+        .disconnected { background-color: #f8d7da; color: #721c24; }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+        }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #6c757d; cursor: not-allowed; }
+        .endpoint-btn {
+            background-color: #28a745;
+        }
+        .endpoint-btn:hover { background-color: #1e7e34; }
+        .unsubscribe-btn {
+            background-color: #dc3545;
+        }
+        .unsubscribe-btn:hover { background-color: #c82333; }
+        .log {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            height: 400px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 2px 0;
+        }
+        .log-info { color: #007bff; }
+        .log-success { color: #28a745; }
+        .log-error { color: #dc3545; }
+        .log-data { color: #6c757d; }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #6c757d;
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔌 ATP Live Proxy - WebSocket Test Client</h1>
+    
+    <div class="container">
+        <h2>Connection Status</h2>
+        <div id="status" class="status disconnected">Disconnected</div>
+        <div class="controls">
+            <button id="connectBtn" onclick="connect()">Connect</button>
+            <button id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
+            <button onclick="clearLog()">Clear Log</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>Statistics</h2>
+        <div class="stats">
+            <div class="stat-card">
+                <div id="socketId" class="stat-value">-</div>
+                <div class="stat-label">Socket ID</div>
+            </div>
+            <div class="stat-card">
+                <div id="subscriptionCount" class="stat-value">0</div>
+                <div class="stat-label">Subscriptions</div>
+            </div>
+            <div class="stat-card">
+                <div id="messageCount" class="stat-value">0</div>
+                <div class="stat-label">Messages</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>Available Endpoints</h2>
+        <div class="controls">
+            <button class="endpoint-btn" onclick="subscribe('/api/live-matches')">Subscribe to Live Matches</button>
+            <button class="endpoint-btn" onclick="subscribe('/api/draws/live')">Subscribe to Live Draw</button>
+            <button class="endpoint-btn" onclick="subscribe('/api/draws')">Subscribe to Draws</button>
+            <button class="endpoint-btn" onclick="subscribe('/api/player-list')">Subscribe to Player List</button>
+            <button class="endpoint-btn" onclick="subscribe('/api/results')">Subscribe to Results</button>
+            <button class="endpoint-btn" onclick="subscribe('/api/schedules')">Subscribe to Schedules</button>
+            <button class="endpoint-btn" onclick="subscribe('/api/team-cup-rankings')">Subscribe to Team Rankings</button>
+        </div>
+        <div class="controls">
+            <button class="unsubscribe-btn" onclick="unsubscribeAll()">Unsubscribe All</button>
+            <button onclick="getSubscriptions()">Get Subscriptions</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>Event Log</h2>
+        <div id="log" class="log"></div>
+    </div>
+
+    <script>
+        let socket = null;
+        let messageCount = 0;
+        let subscriptions = new Set();
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        function updateStats() {
+            document.getElementById('subscriptionCount').textContent = subscriptions.size;
+            document.getElementById('messageCount').textContent = messageCount;
+        }
+
+        function connect() {
+            if (socket) {
+                log('Already connected', 'error');
+                return;
+            }
+
+            log('Connecting to WebSocket server...', 'info');
+            
+            socket = io('http://localhost:3000');
+
+            socket.on('connect', () => {
+                log('Connected to WebSocket server', 'success');
+                document.getElementById('status').textContent = 'Connected';
+                document.getElementById('status').className = 'status connected';
+                document.getElementById('connectBtn').disabled = true;
+                document.getElementById('disconnectBtn').disabled = false;
+                document.getElementById('socketId').textContent = socket.id;
+            });
+
+            socket.on('disconnect', () => {
+                log('Disconnected from WebSocket server', 'error');
+                document.getElementById('status').textContent = 'Disconnected';
+                document.getElementById('status').className = 'status disconnected';
+                document.getElementById('connectBtn').disabled = false;
+                document.getElementById('disconnectBtn').disabled = true;
+                document.getElementById('socketId').textContent = '-';
+                socket = null;
+                subscriptions.clear();
+                updateStats();
+            });
+
+            socket.on('connected', (data) => {
+                log(`Welcome: ${data.message}`, 'success');
+                log(`Available endpoints: ${data.availableEndpoints.join(', ')}`, 'info');
+            });
+
+            socket.on('subscribed', (data) => {
+                log(`Subscribed to ${data.endpoint}`, 'success');
+                subscriptions.add(data.endpoint);
+                updateStats();
+            });
+
+            socket.on('unsubscribed', (data) => {
+                log(`Unsubscribed from ${data.endpoint}`, 'info');
+                subscriptions.delete(data.endpoint);
+                updateStats();
+            });
+
+            socket.on('subscriptions', (data) => {
+                log(`Current subscriptions: ${data.subscriptions.join(', ')}`, 'info');
+                subscriptions = new Set(data.subscriptions);
+                updateStats();
+            });
+
+            socket.on('data-update', (data) => {
+                messageCount++;
+                updateStats();
+                
+                if (data.data) {
+                    log(`Received update for ${data.endpoint} (TTL: ${data.ttl}s, Cached: ${data.cached})`, 'success');
+                    log(`Data: ${JSON.stringify(data.data, null, 2)}`, 'data');
+                } else {
+                    log(`No data available for ${data.endpoint}`, 'error');
+                }
+            });
+
+            socket.on('error', (data) => {
+                log(`Error: ${data.message}`, 'error');
+            });
+
+            socket.on('connect_error', (error) => {
+                log(`Connection error: ${error.message}`, 'error');
+            });
+        }
+
+        function disconnect() {
+            if (socket) {
+                socket.disconnect();
+            }
+        }
+
+        function subscribe(endpoint) {
+            if (!socket) {
+                log('Not connected. Please connect first.', 'error');
+                return;
+            }
+            socket.emit('subscribe', endpoint);
+        }
+
+        function unsubscribeAll() {
+            if (!socket) {
+                log('Not connected. Please connect first.', 'error');
+                return;
+            }
+            const endpointArray = Array.from(subscriptions);
+            if (endpointArray.length > 0) {
+                socket.emit('unsubscribe', endpointArray);
+            }
+        }
+
+        function getSubscriptions() {
+            if (!socket) {
+                log('Not connected. Please connect first.', 'error');
+                return;
+            }
+            socket.emit('get-subscriptions');
+        }
+
+        // Auto-connect on page load
+        window.onload = function() {
+            log('WebSocket test client loaded. Click "Connect" to start.', 'info');
+        };
+    </script>
+</body>
+</html> 
