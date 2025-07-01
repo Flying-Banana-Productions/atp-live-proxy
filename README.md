@@ -220,7 +220,7 @@ http://localhost:3000/api-docs
 
 ## Response Format
 
-All API responses include cache metadata:
+All API responses include cache metadata with TTL information:
 
 ```json
 {
@@ -228,9 +228,26 @@ All API responses include cache metadata:
     // Actual API response data
   },
   "cached": false,
-  "timestamp": "2024-01-15T10:30:00.000Z"
+  "timestamp": "2024-01-15T10:30:00.000Z",
+  "ttl": 600
 }
 ```
+
+### Response Fields
+
+- **`data`**: The actual API response data from the ATP API
+- **`cached`**: Boolean indicating if the response was served from cache (`true`) or fetched fresh (`false`)
+- **`timestamp`**: ISO timestamp of when the response was generated
+- **`ttl`**: Time-to-live in seconds:
+  - For cached responses: Remaining time until cache expires
+  - For non-cached responses: Full TTL duration applied to the cache
+
+### TTL Usage
+
+Clients can use the `ttl` field to optimize their polling strategy:
+- Wait until `ttl` reaches 0 before making a new request for updated data
+- For live data (10-second TTL), poll more frequently
+- For static data (10-minute TTL), poll less frequently
 
 ## Configuration
 
