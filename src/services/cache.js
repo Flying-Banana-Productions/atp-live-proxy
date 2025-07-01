@@ -33,6 +33,20 @@ class CacheService {
   }
 
   /**
+   * Get the remaining TTL for a cached item
+   * @param {string} key - Cache key
+   * @returns {number} Remaining TTL in seconds, or undefined if not found
+   */
+  getTtl(key) {
+    const ttl = this.cache.getTtl(key);
+    if (ttl) {
+      // Convert from milliseconds to seconds and round to nearest second
+      return Math.round((ttl - Date.now()) / 1000);
+    }
+    return undefined;
+  }
+
+  /**
    * Set a value in cache
    * @param {string} key - Cache key
    * @param {*} value - Value to cache

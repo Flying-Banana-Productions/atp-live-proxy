@@ -47,10 +47,12 @@ function cacheMiddleware(ttl = null) {
       if (config.server.nodeEnv === 'development') {
         console.log(`[CACHE HIT] Returning cached data for: ${cacheKey}`);
       }
+      const remainingTtl = cacheService.getTtl(cacheKey);
       return res.json({
         data: cachedData,
         cached: true,
         timestamp: new Date().toISOString(),
+        ttl: remainingTtl,
       });
     }
 
@@ -66,6 +68,7 @@ function cacheMiddleware(ttl = null) {
           data,
           cached: false,
           timestamp: new Date().toISOString(),
+          ttl: endpointTtl,
         });
       } else {
         // For errors, just send the original response
@@ -76,8 +79,6 @@ function cacheMiddleware(ttl = null) {
     next();
   };
 }
-
-
 
 /**
  * Get cache stats middleware

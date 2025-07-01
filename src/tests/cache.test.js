@@ -4,7 +4,8 @@ const request = require('supertest');
 process.env.NODE_ENV = 'test';
 
 const { app } = require('../server');
-const { getEndpointTtl } = require('../middleware/cache');
+const { getEndpointTtl, cacheMiddleware } = require('../middleware/cache');
+const cacheService = require('../services/cache');
 
 describe('Cache Configuration', () => {
   describe('Endpoint-specific TTL', () => {
@@ -87,5 +88,47 @@ describe('Cache Configuration', () => {
       expect(response.body.endpoints['/api/schedules']).toBe(600);
       expect(response.body.endpoints['/api/team-cup-rankings']).toBe(600);
     });
+  });
+
+  test('should include TTL in cached response', async () => {
+    const cacheKey = 'test-key';
+    const testData = { message: 'test data' };
+    
+    // Set data in cache
+    cacheService.set(cacheKey, testData, 60);
+    
+    // Mock request and response
+    const req = {
+      method: 'GET',
+      path: '/api/test',
+      query: {}
+    };
+    
+    const res = {
+      statusCode: 200,
+      json: jest.fn()
+    };
+    
+    // Create middleware instance
+    const middleware = cacheMiddleware();
+    
+    // Mock cacheService.get to return cached data
+    const originalGet = cacheService.get;
+    cacheService.get = jest.fn().mockReturnValue(testData);
+    cacheService.getTtl = jest.fn().mockReturnValue(45); // Mock remaining TTL
+    
+    // Execute middleware
+    await middleware(req, res, () => {});
+    
+    // Verify response includes TTL
+    expect(res.json).toHaveBeenCalledWith({
+      data: testData,
+      cached: true,
+      timestamp: expect.any(String),
+      ttl: 45
+    });
+    
+    // Restore original method
+    cacheService.get = originalGet;
   });
 }); 
