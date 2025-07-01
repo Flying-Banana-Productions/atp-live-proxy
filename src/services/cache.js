@@ -11,7 +11,7 @@ class CacheService {
 
     // Log cache events in development
     if (config.server.nodeEnv === 'development') {
-      this.cache.on('expired', (key, value) => {
+      this.cache.on('expired', (key, _value) => {
         const normalizedKey = this.normalizeKey(key);
         console.log(`[CACHE EXPIRED] key: ${normalizedKey}`);
       });
@@ -27,9 +27,9 @@ class CacheService {
     if (!key.startsWith('/api/')) {
       // If it starts with '/api', leave as is; otherwise, add '/api' prefix
       if (key.startsWith('/')) {
-        return '/api' + key;
+        return `/api${key}`;
       } else {
-        return '/api/' + key;
+        return `/api/${key}`;
       }
     }
     return key;
