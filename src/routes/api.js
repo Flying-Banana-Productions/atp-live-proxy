@@ -1,5 +1,6 @@
 const express = require('express');
 const atpApi = require('../services/atpApi');
+const cacheService = require('../services/cache');
 const { cacheMiddleware } = require('../middleware/cache');
 const config = require('../config');
 
@@ -460,14 +461,37 @@ router.get('/team-cup-rankings', cacheMiddleware(), async (req, res, next) => {
  *               $ref: '#/components/schemas/HealthResponse'
  */
 router.get('/health', (req, res) => {
+  const cacheStats = cacheService.getStats();
+  const memUsage = process.memoryUsage();
+  const heapUsedPercent = (memUsage.heapUsed / memUsage.heapTotal) * 100;
+  
+  // Determine health status based on memory pressure
+  let status = 'healthy';
+  const warnings = [];
+  
+  if (heapUsedPercent > 85) {
+    status = 'critical';
+    warnings.push('High memory usage detected');
+  } else if (heapUsedPercent > 70) {
+    status = 'warning';
+    warnings.push('Elevated memory usage');
+  }
+  
+  if (cacheStats.keys > 10000) {
+    warnings.push('Large number of cache keys');
+  }
+  
   res.json({
-    status: 'healthy',
+    status,
     timestamp: new Date().toISOString(),
     version: '1.0.0',
     cache: {
       ttl: config.cache.ttl,
       checkPeriod: config.cache.checkPeriod,
+      keys: cacheStats.keys,
+      memoryUsage: `${Math.round(heapUsedPercent)}%`,
     },
+    warnings,
   });
 });
 

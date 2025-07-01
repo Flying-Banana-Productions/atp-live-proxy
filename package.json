@@ -5,7 +5,10 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
+    "start:large": "node --max-old-space-size=4096 src/server.js",
+    "start:xlarge": "node --max-old-space-size=8192 src/server.js",
     "dev": "nodemon src/server.js",
+    "dev:large": "nodemon --exec 'node --max-old-space-size=4096' src/server.js",
     "test": "jest",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix"

@@ -62,11 +62,30 @@ class CacheService {
   }
 
   /**
-   * Get cache statistics
-   * @returns {Object} Cache stats
+   * Get cache statistics with memory monitoring
+   * @returns {Object} Cache stats with memory info
    */
   getStats() {
-    return this.cache.getStats();
+    const stats = this.cache.getStats();
+    const memUsage = process.memoryUsage();
+    
+    return {
+      ...stats,
+      memory: {
+        heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024), // MB
+        heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024), // MB
+        heapUsedPercent: Math.round((memUsage.heapUsed / memUsage.heapTotal) * 100),
+        external: Math.round(memUsage.external / 1024 / 1024), // MB
+        rss: Math.round(memUsage.rss / 1024 / 1024), // MB
+      },
+      performance: {
+        hitRatio: stats.hits + stats.misses > 0 
+          ? Math.round((stats.hits / (stats.hits + stats.misses)) * 100)
+          : 0,
+        avgKeySize: stats.ksize > 0 ? Math.round(stats.ksize / stats.keys) : 0,
+        avgValueSize: stats.vsize > 0 ? Math.round(stats.vsize / stats.keys) : 0,
+      }
+    };
   }
 
   /**

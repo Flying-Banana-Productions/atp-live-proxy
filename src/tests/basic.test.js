@@ -25,9 +25,12 @@ describe('ATP Live Proxy Server', () => {
         .get('/api/health')
         .expect(200);
 
-      expect(response.body).toHaveProperty('status', 'healthy');
+      expect(response.body).toHaveProperty('status');
+      expect(['healthy', 'warning', 'critical']).toContain(response.body.status);
       expect(response.body).toHaveProperty('version', '1.0.0');
       expect(response.body).toHaveProperty('cache');
+      expect(response.body.cache).toHaveProperty('keys');
+      expect(response.body.cache).toHaveProperty('memoryUsage');
     });
   });
 
