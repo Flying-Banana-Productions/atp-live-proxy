@@ -62,6 +62,11 @@ RATE_LIMIT_MAX_REQUESTS=100
 
 # Logging
 LOG_LEVEL=info
+
+# CORS Configuration (for production)
+# Comma-separated list of allowed origins
+# Example: ALLOWED_ORIGINS=https://yourdomain.com,https://app.yourdomain.com
+ALLOWED_ORIGINS=
 ```
 
 ## Usage
@@ -472,6 +477,56 @@ npm test
 npm install -g pm2
 pm2 start src/server.js --name atp-proxy
 ```
+
+### Cloud Deployment (Railway, Heroku, etc.)
+
+When deploying to cloud platforms, make sure to set these environment variables:
+
+```env
+NODE_ENV=production
+ATP_BEARER_TOKEN=your_tournament_bearer_token_here
+ATP_API_BASE_URL=https://api.protennislive.com/feeds
+ALLOWED_ORIGINS=https://yourdomain.com,https://app.yourdomain.com
+```
+
+### Troubleshooting Deployment Issues
+
+#### CORS Errors
+If you're getting "Cross-Origin Request Blocked" errors:
+
+1. **Check CORS Configuration**: Ensure `ALLOWED_ORIGINS` includes your domain
+2. **Test with Health Check**: Visit `https://your-domain.com/api/health` to verify the server is running
+3. **Use the Test Page**: Open `test-deployment.html` in your browser to test all endpoints
+
+#### Authentication Errors (401)
+If you're getting 401 "Not authorized" errors:
+
+1. **Check Bearer Token**: Verify `ATP_BEARER_TOKEN` is set correctly in your environment
+2. **Token Validity**: Ensure your ATP Bearer token is valid and not expired
+3. **Health Check**: The `/api/health` endpoint will show if authentication is configured
+
+#### Common Issues
+
+| Issue | Solution |
+|-------|----------|
+| CORS blocked | Set `ALLOWED_ORIGINS` environment variable |
+| 401 Unauthorized | Check `ATP_BEARER_TOKEN` is set |
+| 404 Not Found | Verify the endpoint URL is correct |
+| 500 Server Error | Check server logs for detailed error messages |
+
+#### Testing Your Deployment
+
+1. **Health Check**: `GET /api/health` - Should return 200 with authentication status
+2. **API Info**: `GET /api/info` - Should return 200 with endpoint information
+3. **Test Page**: Use `test-deployment.html` to test all endpoints from your browser
+
+#### Environment Variables Checklist
+
+- ✅ `NODE_ENV=production`
+- ✅ `ATP_BEARER_TOKEN=your_valid_token`
+- ✅ `ATP_API_BASE_URL=https://api.protennislive.com/feeds`
+- ✅ `ALLOWED_ORIGINS=https://yourdomain.com` (comma-separated if multiple)
+- ✅ `PORT` (usually auto-set by cloud platform)
 
 ## Contributing
 

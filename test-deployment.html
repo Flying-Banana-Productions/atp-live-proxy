@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATP Live Proxy - Deployment Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success { border-color: #4CAF50; background-color: #f1f8e9; }
+        .error { border-color: #f44336; background-color: #ffebee; }
+        .warning { border-color: #ff9800; background-color: #fff3e0; }
+        button {
+            background-color: #2196F3;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background-color: #1976D2; }
+        pre {
+            background-color: #f8f8f8;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        .status {
+            font-weight: bold;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ATP Live Proxy - Deployment Test</h1>
+        
+        <div class="test-section">
+            <h3>Configuration</h3>
+            <label for="baseUrl">Base URL:</label>
+            <input type="text" id="baseUrl" value="https://atp-live-proxy-production.up.railway.app" style="width: 100%; margin: 10px 0;">
+            <button onclick="testHealth()">Test Health Check</button>
+            <button onclick="testInfo()">Test API Info</button>
+            <button onclick="testResults()">Test Results Endpoint</button>
+            <button onclick="testAll()">Run All Tests</button>
+        </div>
+
+        <div id="results"></div>
+    </div>
+
+    <script>
+        async function makeRequest(endpoint, description) {
+            const baseUrl = document.getElementById('baseUrl').value;
+            const url = `${baseUrl}${endpoint}`;
+            
+            try {
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+                
+                const data = await response.json();
+                
+                return {
+                    success: response.ok,
+                    status: response.status,
+                    statusText: response.statusText,
+                    data: data,
+                    description: description
+                };
+            } catch (error) {
+                return {
+                    success: false,
+                    error: error.message,
+                    description: description
+                };
+            }
+        }
+
+        function displayResult(result) {
+            const resultsDiv = document.getElementById('results');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `test-section ${result.success ? 'success' : 'error'}`;
+            
+            let statusClass = result.success ? 'success' : 'error';
+            if (result.status === 401) statusClass = 'warning';
+            
+            resultDiv.className = `test-section ${statusClass}`;
+            
+            let statusText = result.success ? '✅ SUCCESS' : '❌ ERROR';
+            if (result.status === 401) statusText = '⚠️ AUTHENTICATION ERROR';
+            
+            resultDiv.innerHTML = `
+                <h4>${result.description}</h4>
+                <div class="status">${statusText}</div>
+                <p><strong>Status:</strong> ${result.status || 'N/A'} ${result.statusText || ''}</p>
+                <pre>${JSON.stringify(result.data || result.error, null, 2)}</pre>
+            `;
+            
+            resultsDiv.appendChild(resultDiv);
+        }
+
+        async function testHealth() {
+            document.getElementById('results').innerHTML = '';
+            const result = await makeRequest('/api/health', 'Health Check');
+            displayResult(result);
+        }
+
+        async function testInfo() {
+            document.getElementById('results').innerHTML = '';
+            const result = await makeRequest('/api/info', 'API Info');
+            displayResult(result);
+        }
+
+        async function testResults() {
+            document.getElementById('results').innerHTML = '';
+            const result = await makeRequest('/api/results', 'Results Endpoint');
+            displayResult(result);
+        }
+
+        async function testAll() {
+            document.getElementById('results').innerHTML = '';
+            
+            const tests = [
+                { endpoint: '/api/health', description: 'Health Check' },
+                { endpoint: '/api/info', description: 'API Info' },
+                { endpoint: '/api/results', description: 'Results Endpoint' }
+            ];
+            
+            for (const test of tests) {
+                const result = await makeRequest(test.endpoint, test.description);
+                displayResult(result);
+                await new Promise(resolve => setTimeout(resolve, 500)); // Small delay between tests
+            }
+        }
+    </script>
+</body>
+</html> 

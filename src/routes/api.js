@@ -481,10 +481,22 @@ router.get('/health', (req, res) => {
     warnings.push('Large number of cache keys');
   }
   
+  // Check authentication configuration
+  const hasBearerToken = !!config.atpApi.bearerToken;
+  if (!hasBearerToken) {
+    status = 'critical';
+    warnings.push('ATP_BEARER_TOKEN is not configured');
+  }
+  
   res.json({
     status,
     timestamp: new Date().toISOString(),
     version: '1.0.0',
+    environment: config.server.nodeEnv,
+    authentication: {
+      configured: hasBearerToken,
+      baseUrl: config.atpApi.baseUrl,
+    },
     cache: {
       ttl: config.cache.ttl,
       checkPeriod: config.cache.checkPeriod,
