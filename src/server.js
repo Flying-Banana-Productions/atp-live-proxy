@@ -87,6 +87,9 @@ app.use('/api', limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Static file serving
+app.use(express.static('public')); // Serve files from public directory
+
 // Swagger UI
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {
   customCss: '.swagger-ui .topbar { display: none }',
@@ -119,9 +122,15 @@ app.get('/', (req, res) => {
       cacheStats: '/api/cache/stats',
       cacheConfig: '/api/cache/config',
       swagger: '/api-docs',
+      test: '/test',
     },
     documentation: 'https://api.protennislive.com/feeds/swagger/index.html',
   });
+});
+
+// Test deployment page route
+app.get('/test', (req, res) => {
+  res.sendFile('test-deployment.html', { root: 'public' });
 });
 
 // 404 handler

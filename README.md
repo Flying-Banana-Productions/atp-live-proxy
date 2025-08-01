@@ -228,7 +228,19 @@ http://localhost:3000/api-docs
 ### Test WebSocket Functionality
 Open the test client in your browser:
 ```
-websocket-test.html
+http://localhost:3000/websocket-test.html
+```
+
+### Test Deployment
+Open the deployment test page in your browser:
+```
+http://localhost:3000/test-deployment.html
+```
+
+### Access All Test Files
+Visit the test files index page:
+```
+http://localhost:3000/
 ```
 
 ## WebSocket API
@@ -449,6 +461,10 @@ atp-live-proxy/
 │   ├── tests/           # Test files
 │   ├── swagger.js       # Swagger configuration
 │   └── server.js        # Main server file
+├── public/              # Static files (test pages, etc.)
+│   ├── index.html       # Test files index page
+│   ├── test-deployment.html  # Deployment test page
+│   └── websocket-test.html   # WebSocket test client
 ├── .env                 # Environment variables
 ├── env.example          # Environment template
 ├── package.json         # Dependencies and scripts
@@ -496,7 +512,7 @@ If you're getting "Cross-Origin Request Blocked" errors:
 
 1. **Check CORS Configuration**: Ensure `ALLOWED_ORIGINS` includes your domain
 2. **Test with Health Check**: Visit `https://your-domain.com/api/health` to verify the server is running
-3. **Use the Test Page**: Open `test-deployment.html` in your browser to test all endpoints
+3. **Use the Test Page**: Open `https://your-domain.com/test-deployment.html` in your browser to test all endpoints
 
 #### Authentication Errors (401)
 If you're getting 401 "Not authorized" errors:
@@ -518,7 +534,7 @@ If you're getting 401 "Not authorized" errors:
 
 1. **Health Check**: `GET /api/health` - Should return 200 with authentication status
 2. **API Info**: `GET /api/info` - Should return 200 with endpoint information
-3. **Test Page**: Use `test-deployment.html` to test all endpoints from your browser
+3. **Test Page**: Use `https://your-domain.com/test-deployment.html` to test all endpoints from your browser
 
 #### Environment Variables Checklist
 

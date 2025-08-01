@@ -83,7 +83,6 @@ dist
 
 # Gatsby files
 .cache/
-public
 
 # Storybook build outputs
 .out
@@ -99,6 +98,17 @@ temp/
 *.swp
 *.swo
 *~
+
+# Security: Prevent sensitive files from being served publicly
+# Only test and utility files should be in the public/ directory
+public/*.env
+public/*.key
+public/*.pem
+public/*.p12
+public/*.crt
+public/*.csr
+public/config.json
+public/secrets.json
 
 # OS generated files
 .DS_Store
