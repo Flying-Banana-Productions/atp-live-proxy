@@ -460,10 +460,13 @@ router.get('/team-cup-rankings', cacheMiddleware(), async (req, res, next) => {
  *             schema:
  *               $ref: '#/components/schemas/HealthResponse'
  */
-router.get('/health', (req, res) => {
-  const cacheStats = cacheService.getStats();
+router.get('/health', async (req, res) => {
+  const cacheStats = await cacheService.getStats();
   const memUsage = process.memoryUsage();
   const heapUsedPercent = (memUsage.heapUsed / memUsage.heapTotal) * 100;
+  
+  // Calculate total keys from both memory and Redis
+  const totalKeys = (cacheStats.memory?.keys || 0) + (cacheStats.redis?.keys || 0);
   
   // Determine health status based on memory pressure
   let status = 'healthy';
@@ -477,7 +480,7 @@ router.get('/health', (req, res) => {
     warnings.push('Elevated memory usage');
   }
   
-  if (cacheStats.keys > 10000) {
+  if (totalKeys > 10000) {
     warnings.push('Large number of cache keys');
   }
   
@@ -500,7 +503,7 @@ router.get('/health', (req, res) => {
     cache: {
       ttl: config.cache.ttl,
       checkPeriod: config.cache.checkPeriod,
-      keys: cacheStats.keys,
+      keys: totalKeys,
       memoryUsage: `${Math.round(heapUsedPercent)}%`,
     },
     warnings,

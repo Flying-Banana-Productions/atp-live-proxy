@@ -32,13 +32,13 @@ if (process.env.NODE_ENV === 'production') {
   const allowedOrigins = process.env.ALLOWED_ORIGINS 
     ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
     : [
-        'http://localhost:3000',
-        'http://localhost:3001',
-        'http://localhost:8080',
-        'http://127.0.0.1:3000',
-        'http://127.0.0.1:3001',
-        'http://127.0.0.1:8080'
-      ];
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:8080',
+      'http://127.0.0.1:3000',
+      'http://127.0.0.1:3001',
+      'http://127.0.0.1:8080'
+    ];
   
   corsOptions.origin = function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
@@ -87,6 +87,26 @@ app.use('/api', limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Root endpoint - must be before static middleware to avoid index.html conflict
+app.get('/', (req, res) => {
+  res.json({
+    message: 'ATP Live Proxy API',
+    version: '1.0.0',
+    status: 'running',
+    timestamp: new Date().toISOString(),
+    endpoints: {
+      api: '/api',
+      health: '/api/health',
+      info: '/api/info',
+      cacheStats: '/api/cache/stats',
+      cacheConfig: '/api/cache/config',
+      swagger: '/api-docs',
+      test: '/test',
+    },
+    documentation: 'https://api.protennislive.com/feeds/swagger/index.html',
+  });
+});
+
 // Static file serving
 app.use(express.static('public')); // Serve files from public directory
 
@@ -108,26 +128,6 @@ app.use('/api', apiRoutes);
 // Cache management routes (no cache middleware)
 app.use('/api', cacheRoutes);
 
-// Root endpoint
-app.get('/', (req, res) => {
-  res.json({
-    message: 'ATP Live Proxy API',
-    version: '1.0.0',
-    status: 'running',
-    timestamp: new Date().toISOString(),
-    endpoints: {
-      api: '/api',
-      health: '/api/health',
-      info: '/api/info',
-      cacheStats: '/api/cache/stats',
-      cacheConfig: '/api/cache/config',
-      swagger: '/api-docs',
-      test: '/test',
-    },
-    documentation: 'https://api.protennislive.com/feeds/swagger/index.html',
-  });
-});
-
 // Test deployment page route
 app.get('/test', (req, res) => {
   res.sendFile('test-deployment.html', { root: 'public' });
@@ -139,32 +139,62 @@ app.use(notFoundHandler);
 // Error handling middleware (must be last)
 app.use(errorHandler);
 
+// Initialize cache service and start server
+async function startServer() {
+  const cacheService = require('./services/cache');
+  
+  try {
+    // Initialize cache service first
+    console.log('🔄 Initializing cache service...');
+    await cacheService.initialize();
+    
+    const PORT = config.server.port;
+    server = app.listen(PORT, () => {
+      console.log(`🚀 ATP Live Proxy Server running on port ${PORT}`);
+      console.log(`📊 Environment: ${config.server.nodeEnv}`);
+      console.log(`🔗 API Base URL: ${config.atpApi.baseUrl}`);
+      console.log(`🗄️  Cache Strategy: ${cacheService.getProviderType()}`);
+      console.log(`⏱️  Cache TTL: ${config.cache.ttl} seconds (default)`);
+      console.log(`📈 Rate Limit: ${config.rateLimit.maxRequests} requests per ${config.rateLimit.windowMs / 1000 / 60} minutes`);
+      console.log(`🌐 Server URL: http://localhost:${PORT}`);
+      console.log(`📋 API Info: http://localhost:${PORT}/api/info`);
+      console.log(`💚 Health Check: http://localhost:${PORT}/api/health`);
+      console.log(`📖 Swagger Docs: http://localhost:${PORT}/api-docs`);
+      console.log(`⚙️  Cache Config: http://localhost:${PORT}/api/cache/config`);
+      console.log(`🔌 WebSocket: ws://localhost:${PORT}`);
+    });
+
+    // Initialize WebSocket server
+    webSocketServer.initialize(server);
+  } catch (error) {
+    console.error('❌ Failed to initialize cache service:', error.message);
+    console.error('🛑 Server startup aborted');
+    process.exit(1);
+  }
+}
+
 // Start server only if not in test environment
 let server;
 if (process.env.NODE_ENV !== 'test') {
-  const PORT = config.server.port;
-  server = app.listen(PORT, () => {
-    console.log(`🚀 ATP Live Proxy Server running on port ${PORT}`);
-    console.log(`📊 Environment: ${config.server.nodeEnv}`);
-    console.log(`🔗 API Base URL: ${config.atpApi.baseUrl}`);
-    console.log(`⏱️  Cache TTL: ${config.cache.ttl} seconds (default)`);
-    console.log(`📈 Rate Limit: ${config.rateLimit.maxRequests} requests per ${config.rateLimit.windowMs / 1000 / 60} minutes`);
-    console.log(`🌐 Server URL: http://localhost:${PORT}`);
-    console.log(`📋 API Info: http://localhost:${PORT}/api/info`);
-    console.log(`💚 Health Check: http://localhost:${PORT}/api/health`);
-    console.log(`📖 Swagger Docs: http://localhost:${PORT}/api-docs`);
-    console.log(`⚙️  Cache Config: http://localhost:${PORT}/api/cache/config`);
-    console.log(`🔌 WebSocket: ws://localhost:${PORT}`);
-  });
-
-  // Initialize WebSocket server
-  webSocketServer.initialize(server);
+  startServer();
 }
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully');
+async function shutdown() {
+  console.log('Shutting down gracefully...');
+  
+  // Stop WebSocket server
   webSocketServer.stop();
+  
+  // Disconnect cache service
+  try {
+    const cacheService = require('./services/cache');
+    await cacheService.disconnect();
+  } catch (error) {
+    console.error('Error disconnecting cache service:', error.message);
+  }
+  
+  // Close HTTP server
   if (server) {
     server.close(() => {
       console.log('Server closed');
@@ -173,19 +203,13 @@ process.on('SIGTERM', () => {
   } else {
     process.exit(0);
   }
-});
+}
+
+process.on('SIGTERM', shutdown);
 
 process.on('SIGINT', () => {
   console.log('SIGINT received, shutting down gracefully');
-  webSocketServer.stop();
-  if (server) {
-    server.close(() => {
-      console.log('Server closed');
-      process.exit(0);
-    });
-  } else {
-    process.exit(0);
-  }
+  shutdown();
 });
 
 module.exports = { app, server }; 

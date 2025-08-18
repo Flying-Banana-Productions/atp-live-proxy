@@ -8,7 +8,7 @@ module.exports = {
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
-  setupFilesAfterEnv: [],
+  setupFilesAfterEnv: ['<rootDir>/src/tests/teardown.js'],
   testTimeout: 10000,
   verbose: true,
   forceExit: true,

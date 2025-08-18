@@ -1,105 +1,133 @@
-const NodeCache = require('node-cache');
-const config = require('../config');
+const CacheFactory = require('./cacheFactory');
 
+/**
+ * Main cache service that delegates to the appropriate cache provider
+ * Determined by configuration and initialized at startup
+ */
 class CacheService {
   constructor() {
-    this.cache = new NodeCache({
-      stdTTL: config.cache.ttl,
-      checkperiod: config.cache.checkPeriod,
-      useClones: false,
-    });
-
-    // Log cache events in development
-    if (config.server.nodeEnv === 'development') {
-      this.cache.on('expired', (key, _value) => {
-        console.log(`[CACHE EXPIRED] key: ${key}`);
-      });
-    }
+    this.provider = null;
+    this.isInitialized = false;
   }
 
+  /**
+   * Initialize the cache service with the appropriate provider
+   * This should be called at application startup
+   */
+  async initialize() {
+    if (this.isInitialized) {
+      return;
+    }
 
+    this.provider = await CacheFactory.createCache();
+    this.isInitialized = true;
+    
+    console.log(`[CACHE SERVICE] Initialized with provider: ${this.provider.getType()}`);
+  }
 
   /**
    * Get a value from cache
    * @param {string} key - Cache key
-   * @returns {*} Cached value or undefined if not found
+   * @returns {Promise<*>} Cached value or null if not found
    */
-  get(key) {
-    const value = this.cache.get(key);
-    if (config.server.nodeEnv === 'development') {
-      console.log(`[CACHE GET] key: ${key} | hit: ${value !== undefined}`);
+  async get(key) {
+    if (!this.isInitialized || !this.provider) {
+      throw new Error('Cache service not initialized');
     }
-    return value;
-  }
-
-  /**
-   * Get the remaining TTL for a cached item
-   * @param {string} key - Cache key
-   * @returns {number} Remaining TTL in seconds, or undefined if not found
-   */
-  getTtl(key) {
-    const ttl = this.cache.getTtl(key);
-    if (ttl) {
-      // Convert from milliseconds to seconds and round to nearest second
-      return Math.round((ttl - Date.now()) / 1000);
-    }
-    return undefined;
+    return await this.provider.get(key);
   }
 
   /**
    * Set a value in cache
    * @param {string} key - Cache key
    * @param {*} value - Value to cache
-   * @param {number} ttl - Time to live in seconds (optional, uses default if not provided)
+   * @param {number} ttl - Time to live in seconds
+   * @returns {Promise<boolean>} Success status
    */
-  set(key, value, ttl = null) {
-    const cacheTtl = ttl || config.cache.ttl;
-    this.cache.set(key, value, cacheTtl);
-    if (config.server.nodeEnv === 'development') {
-      console.log(`[CACHE SET] key: ${key} | ttl: ${cacheTtl}`);
+  async set(key, value, ttl = null) {
+    if (!this.isInitialized || !this.provider) {
+      throw new Error('Cache service not initialized');
     }
+    return await this.provider.set(key, value, ttl);
+  }
+
+  /**
+   * Get the remaining TTL for a cached item
+   * @param {string} key - Cache key
+   * @returns {Promise<number|null>} Remaining TTL in seconds, or null if not found
+   */
+  async getTtl(key) {
+    if (!this.isInitialized || !this.provider) {
+      throw new Error('Cache service not initialized');
+    }
+    return await this.provider.getTtl(key);
   }
 
   /**
    * Delete a value from cache
    * @param {string} key - Cache key
+   * @returns {Promise<boolean>} Success status
    */
-  del(key) {
-    this.cache.del(key);
+  async del(key) {
+    if (!this.isInitialized || !this.provider) {
+      throw new Error('Cache service not initialized');
+    }
+    return await this.provider.del(key);
   }
 
   /**
    * Clear all cache
+   * @returns {Promise<boolean>} Success status
    */
-  flush() {
-    this.cache.flushAll();
+  async flush() {
+    if (!this.isInitialized || !this.provider) {
+      throw new Error('Cache service not initialized');
+    }
+    return await this.provider.flush();
   }
 
   /**
-   * Get cache statistics with memory monitoring
-   * @returns {Object} Cache stats with memory info
+   * Get cache statistics
+   * @returns {Promise<Object>} Cache stats
    */
-  getStats() {
-    const stats = this.cache.getStats();
-    const memUsage = process.memoryUsage();
-    
-    return {
-      ...stats,
-      memory: {
-        heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024), // MB
-        heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024), // MB
-        heapUsedPercent: Math.round((memUsage.heapUsed / memUsage.heapTotal) * 100),
-        external: Math.round(memUsage.external / 1024 / 1024), // MB
-        rss: Math.round(memUsage.rss / 1024 / 1024), // MB
-      },
-      performance: {
-        hitRatio: stats.hits + stats.misses > 0 
-          ? Math.round((stats.hits / (stats.hits + stats.misses)) * 100)
-          : 0,
-        avgKeySize: stats.ksize > 0 ? Math.round(stats.ksize / stats.keys) : 0,
-        avgValueSize: stats.vsize > 0 ? Math.round(stats.vsize / stats.keys) : 0,
-      }
-    };
+  async getStats() {
+    if (!this.isInitialized || !this.provider) {
+      return {
+        type: 'uninitialized',
+        available: false,
+        error: 'Cache service not initialized'
+      };
+    }
+    return await this.provider.getStats();
+  }
+
+  /**
+   * Check if cache is available
+   * @returns {boolean} Availability status
+   */
+  isAvailable() {
+    return this.isInitialized && this.provider && this.provider.isAvailable();
+  }
+
+  /**
+   * Get the current cache provider type
+   * @returns {string|null} Provider type or null if not initialized
+   */
+  getProviderType() {
+    return this.provider ? this.provider.getType() : null;
+  }
+
+  /**
+   * Cleanup and disconnect the cache provider
+   * @returns {Promise<void>}
+   */
+  async disconnect() {
+    if (this.provider) {
+      await this.provider.disconnect();
+      this.provider = null;
+      this.isInitialized = false;
+      console.log('[CACHE SERVICE] Disconnected');
+    }
   }
 
   /**
@@ -117,4 +145,6 @@ class CacheService {
   }
 }
 
-module.exports = new CacheService(); 
+// Export a singleton instance
+const cacheService = new CacheService();
+module.exports = cacheService;

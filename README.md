@@ -5,7 +5,7 @@ A Node.js proxy server with Express for the ATP (Association of Tennis Professio
 ## Features
 
 - 🏆 **Complete ATP API Proxy**: Proxies all endpoints from the official ATP API with Bearer token authentication
-- ⚡ **In-Memory Caching**: Endpoint-specific cache timeouts optimized for different data types
+- ⚡ **Flexible Caching System**: Redis, in-memory, or disabled caching with endpoint-specific TTL optimization
 - 🔌 **Real-time WebSocket Updates**: Optional WebSocket support for real-time data streaming
 - 🔒 **Security**: Helmet.js security headers, CORS, and rate limiting
 - 📊 **Monitoring**: Health checks, cache statistics, and comprehensive logging
@@ -53,8 +53,15 @@ ATP_API_BASE_URL=https://api.protennislive.com/feeds
 ATP_BEARER_TOKEN=your_tournament_bearer_token_here
 
 # Cache Configuration
+CACHE_ENABLED=true
 CACHE_TTL=30
 CACHE_CHECK_PERIOD=60
+
+# Redis Configuration (optional)
+# If REDIS_URL is set and CACHE_ENABLED=true, Redis will be used as primary cache
+# If Redis connection fails during startup, the server will exit with an error
+# If REDIS_URL is not set, in-memory cache will be used
+# REDIS_URL=redis://localhost:6379
 
 # Rate Limiting
 RATE_LIMIT_WINDOW_MS=900000
@@ -393,11 +400,46 @@ Clients can use the `ttl` field to optimize their polling strategy:
 | `NODE_ENV` | development | Environment mode |
 | `ATP_API_BASE_URL` | https://api.protennislive.com/feeds | ATP API base URL |
 | `ATP_BEARER_TOKEN` | - | Tournament-specific Bearer token |
+| `CACHE_ENABLED` | true | Enable/disable caching (true/false) |
 | `CACHE_TTL` | 30 | Default cache time-to-live in seconds |
 | `CACHE_CHECK_PERIOD` | 60 | Cache cleanup check period in seconds |
+| `REDIS_URL` | - | Optional Redis connection URL (enables Redis caching) |
 | `RATE_LIMIT_WINDOW_MS` | 900000 | Rate limit window in milliseconds |
 | `RATE_LIMIT_MAX_REQUESTS` | 100 | Maximum requests per window |
 | `LOG_LEVEL` | info | Logging level |
+
+### Cache Strategy Configuration
+
+The application uses a **single cache provider architecture** determined at startup for optimal performance and predictable behavior. The cache provider is selected automatically based on your configuration:
+
+#### **Cache Provider Selection**
+
+1. **Disabled Caching** (`CACHE_ENABLED=false`)
+   - Uses no-op cache (all operations ignored)
+   - Best for development/testing when caching interferes with debugging
+
+2. **Redis Caching** (`CACHE_ENABLED=true` + `REDIS_URL` set)
+   - Primary choice for production deployments
+   - Supports clustering and persistence
+   - **Fail-fast behavior**: Server exits immediately if Redis connection fails at startup
+   - No fallback to other providers during operation
+   - Redis URL formats:
+     - Local: `redis://localhost:6379`
+     - With auth: `redis://user:password@host:port/database`
+     - Redis Cloud: Use the provided connection URL from your service
+
+3. **In-Memory Caching** (`CACHE_ENABLED=true` + no `REDIS_URL`)
+   - Default fallback when Redis is not configured
+   - Uses node-cache for fast in-memory storage
+   - Data lost on server restart
+   - Perfect for single-instance deployments
+
+#### **Benefits of Single Provider Architecture**
+
+- **Predictable Performance**: Always know which cache system is active
+- **No Hybrid Complexity**: No confusing fallback logic during requests
+- **Clear Failure Modes**: Redis failures are caught at startup, not during user requests
+- **Simplified Operations**: Each deployment has one clear caching strategy
 
 ### Smart Cache Configuration
 
@@ -421,10 +463,13 @@ The proxy uses intelligent caching with endpoint-specific TTL values:
 
 ### Cache Features
 
-- **Automatic cleanup**: Every 60 seconds
+- **Single provider architecture**: Redis OR in-memory OR disabled (no hybrid complexity)
+- **Automatic cleanup**: Every 60 seconds (in-memory cache only)
+- **Cache persistence**: Redis survives restarts, in-memory does not
 - **Cache keys**: Generated from endpoint and query parameters
 - **Cache statistics**: Available via `/api/cache/stats`
-- **Cache configuration**: View current TTL values via `/api/cache/config`
+- **Cache configuration**: View current TTL values and active provider via `/api/cache/config`
+- **Fail-fast Redis**: Server exits immediately on Redis connection failure (no silent degradation)
 
 ## Security Features
 
@@ -529,6 +574,41 @@ If you're getting 401 "Not authorized" errors:
 | 401 Unauthorized | Check `ATP_BEARER_TOKEN` is set |
 | 404 Not Found | Verify the endpoint URL is correct |
 | 500 Server Error | Check server logs for detailed error messages |
+| Server exits on startup | Check Redis connection if `REDIS_URL` is configured |
+
+#### Redis-Specific Troubleshooting
+
+If you're using Redis caching and experiencing startup issues:
+
+1. **Server Exits Immediately**: Redis connection failed during startup
+   - Verify Redis is running: `redis-cli ping`
+   - Check Redis URL format: `redis://host:port` or `redis://user:pass@host:port/db`
+   - For local development: `redis://localhost:6379`
+   - For Redis Cloud/managed services: Use the exact URL provided
+
+2. **Connection Refused Errors**:
+   ```bash
+   # Start local Redis server
+   redis-server
+   
+   # Or with Docker
+   docker run -p 6379:6379 redis:alpine
+   ```
+
+3. **Authentication Errors**: Include credentials in Redis URL
+   ```env
+   REDIS_URL=redis://username:password@hostname:port/database
+   ```
+
+4. **Switch to In-Memory Cache**: Remove or comment out `REDIS_URL`
+   ```env
+   # REDIS_URL=redis://localhost:6379
+   ```
+
+5. **Disable Caching Entirely**: Set `CACHE_ENABLED=false`
+   ```env
+   CACHE_ENABLED=false
+   ```
 
 #### Testing Your Deployment
 

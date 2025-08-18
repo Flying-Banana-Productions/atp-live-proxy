@@ -31,12 +31,14 @@ class AtpApiService {
         return response;
       },
       (error) => {
-        console.error('API Error:', {
-          status: error.response?.status,
-          statusText: error.response?.statusText,
-          url: error.config?.url,
-          message: error.message,
-        });
+        if(error.response?.status != 404) {
+          console.error('API Error:', {
+            status: error.response?.status,
+            statusText: error.response?.statusText,
+            url: error.config?.url,
+            message: error.message,
+          });
+        }
         return Promise.reject(error);
       }
     );
@@ -168,6 +170,9 @@ class AtpApiService {
     if (error.response) {
       // Server responded with error status
       const { status, statusText, data } = error.response;
+
+      // 404 means no results, not an error
+      if(status == 404) return;
       const apiError = new Error(`ATP API Error: ${status} ${statusText}`);
       apiError.status = status;
       apiError.statusText = statusText;

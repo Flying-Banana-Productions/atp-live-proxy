@@ -10,6 +10,7 @@ const config = {
     bearerToken: process.env.ATP_BEARER_TOKEN,
   },
   cache: {
+    enabled: process.env.CACHE_ENABLED !== 'false', // Default to enabled, set to 'false' to disable
     ttl: parseInt(process.env.CACHE_TTL) || 30, // seconds - default fallback
     checkPeriod: parseInt(process.env.CACHE_CHECK_PERIOD) || 60, // seconds
     // Endpoint-specific TTL values (in seconds)
@@ -37,6 +38,9 @@ const config = {
   },
   logging: {
     level: process.env.LOG_LEVEL || 'info',
+  },
+  redis: {
+    url: process.env.REDIS_URL,
   },
 };
 

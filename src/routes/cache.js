@@ -20,8 +20,8 @@ const router = express.Router();
  *             schema:
  *               $ref: '#/components/schemas/CacheStats'
  */
-router.get('/cache/stats', (req, res) => {
-  const stats = cacheService.getStats();
+router.get('/cache/stats', async (req, res) => {
+  const stats = await cacheService.getStats();
   res.json({
     stats,
     timestamp: new Date().toISOString(),
