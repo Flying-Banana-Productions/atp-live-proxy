@@ -65,6 +65,17 @@ class RedisCache extends CacheProvider {
 
       await this.client.connect();
       console.log('[REDIS] Initialized successfully');
+      
+      // Flush cache on startup if configured to do so
+      if (config.redis.flushOnStartup) {
+        console.log('[REDIS] Flushing cache on startup...');
+        const flushSuccess = await this.flush();
+        if (flushSuccess) {
+          console.log('[REDIS] Cache flushed successfully on startup');
+        } else {
+          console.warn('[REDIS] Failed to flush cache on startup');
+        }
+      }
     } catch (error) {
       console.error('[REDIS] Failed to connect:', error.message);
       this.isConnected = false;

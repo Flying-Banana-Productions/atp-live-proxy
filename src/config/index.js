@@ -41,6 +41,7 @@ const config = {
   },
   redis: {
     url: process.env.REDIS_URL,
+    flushOnStartup: process.env.REDIS_FLUSH_ON_STARTUP !== 'false', // Default to true, set to 'false' to disable
   },
 };
 
