@@ -161,6 +161,18 @@ class AtpApiService {
     return this.get('/TeamCupRankings', params);
   }
 
+  // ===== TOURNAMENTS ENDPOINTS =====
+  /**
+   * Get detailed information about a specific tournament
+   * @param {string|number} tournamentYear - Event year of the tournament
+   * @param {string|number} tournamentId - Event id of the tournament
+   * @param {Object} params - Query parameters
+   * @returns {Promise<Object>} Tournament details data
+   */
+  async getTournament(tournamentYear, tournamentId, params = {}) {
+    return this.get(`/Tournaments/${tournamentYear}/${tournamentId}`, params);
+  }
+
   /**
    * Handle API errors and format them consistently
    * @param {Error} error - Axios error

@@ -101,6 +101,7 @@ app.get('/', (req, res) => {
       cacheStats: '/api/cache/stats',
       cacheConfig: '/api/cache/config',
       swagger: '/api-docs',
+      swaggerJson: '/api-docs/swagger.json',
       test: '/test',
     },
     documentation: 'https://api.protennislive.com/feeds/swagger/index.html',
@@ -109,6 +110,12 @@ app.get('/', (req, res) => {
 
 // Static file serving
 app.use(express.static('public')); // Serve files from public directory
+
+// Swagger JSON endpoint
+app.get('/api-docs/swagger.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerSpecs);
+});
 
 // Swagger UI
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {
@@ -119,6 +126,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpecs, {
     docExpansion: 'list',
     filter: true,
     showRequestHeaders: true,
+    url: '/api-docs/swagger.json',
   },
 }));
 

@@ -443,6 +443,60 @@ router.get('/team-cup-rankings', cacheMiddleware(), async (req, res, next) => {
   }
 });
 
+// ===== TOURNAMENTS ENDPOINTS =====
+
+/**
+ * @swagger
+ * /api/tournaments/{tournamentYear}/{tournamentId}:
+ *   get:
+ *     summary: Get tournament details
+ *     description: Retrieves the details for a specific tournament by year and ID
+ *     tags: [Tournaments]
+ *     parameters:
+ *       - in: path
+ *         name: tournamentYear
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           format: int32
+ *         description: Event year of the tournament info being retrieved
+ *       - in: path
+ *         name: tournamentId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           format: int32
+ *         description: Event id of the tournament info being retrieved
+ *     responses:
+ *       200:
+ *         description: Tournament details retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/CacheResponse'
+ *       401:
+ *         description: Not authorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: Tournament not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.get('/tournaments/:tournamentYear/:tournamentId', cacheMiddleware(), async (req, res, next) => {
+  try {
+    const { tournamentYear, tournamentId } = req.params;
+    const data = await atpApi.getTournament(tournamentYear, tournamentId, req.query);
+    res.json(data);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // ===== SYSTEM ENDPOINTS =====
 
 /**

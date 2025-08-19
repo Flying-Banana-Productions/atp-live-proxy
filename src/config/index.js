@@ -30,6 +30,7 @@ const config = {
       '/api/draws/live': 600, // 10 minutes
       '/api/schedules': 600, // 10 minutes
       '/api/team-cup-rankings': 600, // 10 minutes
+      '/api/tournaments': 3600, // 1 hour (tournament info changes rarely)
     },
   },
   rateLimit: {
