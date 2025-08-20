@@ -17,6 +17,16 @@ const swaggerSpecs = require('./swagger');
 
 const app = express();
 
+// Health check endpoint (before other middleware)
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    service: 'atp-live-proxy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
 // Security middleware
 app.use(helmet());
 
