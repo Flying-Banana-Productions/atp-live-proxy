@@ -1,0 +1,35 @@
+# Production build for ATP Live Proxy
+FROM node:20-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Install curl for health checks
+RUN apk add --no-cache curl
+
+# Copy package files first for better Docker layer caching
+COPY package*.json ./
+
+# Install production dependencies only
+RUN npm ci --only=production && npm cache clean --force
+
+# Copy source code
+COPY . .
+
+# Create non-root user for security
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodeapp -u 1001 -G nodejs
+
+# Change ownership of the app directory
+RUN chown -R nodeapp:nodejs /app
+USER nodeapp
+
+# Expose the port the app runs on
+EXPOSE 3000
+
+# Health check for the app (uses existing /api/health endpoint)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD curl -f http://localhost:3000/api/health || exit 1
+
+# Start production service
+CMD ["npm", "run", "start"]
