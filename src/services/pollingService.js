@@ -2,16 +2,21 @@ const atpApi = require('./atpApi');
 const cacheService = require('./cache');
 const subscriptionService = require('./subscriptionService');
 const { getEndpointTtl } = require('../middleware/cache');
+const eventGenerator = require('./eventGenerator');
+const apiLogger = require('./apiLogger');
+const config = require('../config');
 
 /**
- * Background polling service for WebSocket updates
+ * Background polling service for WebSocket updates and event generation
  * Fetches data from ATP API at configured TTL intervals
- * and broadcasts updates to subscribed clients
+ * and broadcasts updates to subscribed clients while generating events
  */
 class PollingService {
   constructor() {
     this.pollingIntervals = new Map();
     this.isRunning = false;
+    // Track polling reasons for each endpoint: 'subscription', 'events', or both
+    this.pollingReasons = new Map();
   }
 
   /**
@@ -30,6 +35,9 @@ class PollingService {
 
     // Start polling for all subscribed endpoints
     this.startPollingForSubscribedEndpoints();
+    
+    // Start polling for event-monitored endpoints
+    this.startEventPolling();
   }
 
   /**
@@ -55,24 +63,48 @@ class PollingService {
     const stats = subscriptionService.getStats();
     
     for (const endpoint of stats.endpoints) {
-      this.startPollingForEndpoint(endpoint);
+      this.startPollingForEndpoint(endpoint, 'subscription');
+    }
+  }
+
+  /**
+   * Start polling for event-monitored endpoints
+   */
+  startEventPolling() {
+    if (!config.events.enabled) {
+      console.log('[POLLING] Event generation disabled, skipping event polling');
+      return;
+    }
+
+    const eventEndpoints = config.events.endpoints;
+    console.log(`[POLLING] Starting event polling for: ${eventEndpoints.join(', ')}`);
+    
+    for (const endpoint of eventEndpoints) {
+      this.startPollingForEndpoint(endpoint, 'events');
     }
   }
 
   /**
    * Start polling for a specific endpoint
    * @param {string} endpoint - API endpoint path
+   * @param {string} reason - Reason for polling: 'subscription', 'events', or existing
    */
-  startPollingForEndpoint(endpoint) {
+  startPollingForEndpoint(endpoint, reason = 'subscription') {
+    // Track the reason for polling
+    const existingReasons = this.pollingReasons.get(endpoint) || new Set();
+    existingReasons.add(reason);
+    this.pollingReasons.set(endpoint, existingReasons);
+
     if (this.pollingIntervals.has(endpoint)) {
-      console.log(`[POLLING] Already polling for ${endpoint}`);
+      console.log(`[POLLING] Already polling for ${endpoint}, added reason: ${reason}`);
       return;
     }
 
     const ttl = getEndpointTtl(endpoint);
     const intervalMs = ttl * 1000; // Convert to milliseconds
 
-    console.log(`[POLLING] Starting to poll ${endpoint} every ${ttl} seconds`);
+    const reasonsStr = Array.from(existingReasons).join('+');
+    console.log(`[POLLING] Starting to poll ${endpoint} every ${ttl} seconds (${reasonsStr})`);
 
     // Initial fetch
     this.fetchAndBroadcast(endpoint);
@@ -88,15 +120,32 @@ class PollingService {
   }
 
   /**
-   * Stop polling for a specific endpoint
+   * Stop polling for a specific endpoint for a specific reason
    * @param {string} endpoint - API endpoint path
+   * @param {string} reason - Reason to stop: 'subscription' or 'events'
    */
-  stopPollingForEndpoint(endpoint) {
-    const interval = this.pollingIntervals.get(endpoint);
-    if (interval) {
-      clearInterval(interval);
-      this.pollingIntervals.delete(endpoint);
-      console.log(`[POLLING] Stopped polling for ${endpoint}`);
+  stopPollingForEndpoint(endpoint, reason = 'subscription') {
+    const reasons = this.pollingReasons.get(endpoint);
+    if (!reasons) {
+      return; // Not polling this endpoint
+    }
+
+    // Remove this specific reason
+    reasons.delete(reason);
+    
+    if (reasons.size === 0) {
+      // No more reasons to poll, stop completely
+      const interval = this.pollingIntervals.get(endpoint);
+      if (interval) {
+        clearInterval(interval);
+        this.pollingIntervals.delete(endpoint);
+        this.pollingReasons.delete(endpoint);
+        console.log(`[POLLING] Stopped polling for ${endpoint} (no more reasons)`);
+      }
+    } else {
+      // Still have other reasons to poll
+      const reasonsStr = Array.from(reasons).join('+');
+      console.log(`[POLLING] Removed ${reason} reason for ${endpoint}, still polling for: ${reasonsStr}`);
     }
   }
 
@@ -112,6 +161,18 @@ class PollingService {
       const data = await this.fetchEndpointData(endpoint);
       
       if (data) {
+        // Log API response if logging is enabled and this is an event-monitored endpoint
+        if (config.apiLogging.enabled && this.shouldLogEndpoint(endpoint)) {
+          await apiLogger.logResponse(endpoint, data, {
+            source: 'polling-service',
+            poll_cycle: Date.now()
+          });
+        }
+        
+        // Generate events before caching (events need to compare with previous state)
+        eventGenerator.processData(endpoint, data);
+
+        
         // Update cache
         const ttl = getEndpointTtl(endpoint);
         const cacheKey = cacheService.generateKey(endpoint);
@@ -126,11 +187,14 @@ class PollingService {
         };
 
         // Broadcast to all subscribed clients
-        this.broadcastUpdate(endpoint, response);
-        
-        console.log(`[POLLING] Broadcasted update for ${endpoint} to ${subscriptionService.getSubscribers(endpoint).size} subscribers`);
+        const numSubs = subscriptionService.getSubscribers(endpoint).size;
+        if(numSubs > 0) {
+          this.broadcastUpdate(endpoint, response);
+          console.log(`[POLLING] Broadcasted update for ${endpoint} to ${numSubs} subscribers`);
+        }
       }
     } catch (error) {
+      if(Object.keys(error).length == 0) return;
       console.error(`[POLLING] Error fetching data for ${endpoint}:`, error.message);
     }
   }
@@ -201,9 +265,7 @@ class PollingService {
    * @param {string} endpoint - API endpoint path
    */
   onSubscriptionAdded(endpoint) {
-    if (!this.pollingIntervals.has(endpoint)) {
-      this.startPollingForEndpoint(endpoint);
-    }
+    this.startPollingForEndpoint(endpoint, 'subscription');
   }
 
   /**
@@ -213,7 +275,7 @@ class PollingService {
   onSubscriptionRemoved(endpoint) {
     const subscribers = subscriptionService.getSubscribers(endpoint);
     if (subscribers.size === 0) {
-      this.stopPollingForEndpoint(endpoint);
+      this.stopPollingForEndpoint(endpoint, 'subscription');
     }
   }
 
@@ -222,11 +284,33 @@ class PollingService {
    * @returns {Object} Polling stats
    */
   getStats() {
+    const endpointReasons = {};
+    for (const [endpoint, reasons] of this.pollingReasons) {
+      endpointReasons[endpoint] = Array.from(reasons);
+    }
+
     return {
       isRunning: this.isRunning,
       activeEndpoints: Array.from(this.pollingIntervals.keys()),
       totalActiveEndpoints: this.pollingIntervals.size,
+      pollingReasons: endpointReasons,
+      eventEndpoints: config.events.enabled ? config.events.endpoints : [],
+      eventsEnabled: config.events.enabled,
     };
+  }
+
+  /**
+   * Determine if an endpoint should be logged
+   * @param {string} endpoint - API endpoint path
+   * @returns {boolean} Whether to log this endpoint
+   */
+  shouldLogEndpoint(endpoint) {
+    if (config.apiLogging.logAllEndpoints) {
+      return true;
+    }
+    
+    // Log only event-monitored endpoints
+    return config.events.enabled && config.events.endpoints.includes(endpoint);
   }
 }
 

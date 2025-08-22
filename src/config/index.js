@@ -44,6 +44,21 @@ const config = {
     url: process.env.REDIS_URL,
     flushOnStartup: process.env.REDIS_FLUSH_ON_STARTUP !== 'false', // Default to true, set to 'false' to disable
   },
+  events: {
+    enabled: process.env.EVENTS_ENABLED !== 'false', // Default to enabled, set to 'false' to disable
+    endpoints: (process.env.EVENTS_ENDPOINTS || '/api/live-matches,/api/draws/live').split(','),
+    consoleOutput: process.env.EVENTS_CONSOLE_OUTPUT !== 'false', // Default to enabled
+    // Future webhook configuration
+    webhookUrl: process.env.EVENTS_WEBHOOK_URL,
+    webhookSecret: process.env.EVENTS_WEBHOOK_SECRET,
+  },
+  apiLogging: {
+    enabled: process.env.ENABLE_API_LOGGING === 'true', // Disabled by default for security
+    baseDir: process.env.API_LOG_DIR || './logs/api-responses',
+    logAllEndpoints: process.env.LOG_ALL_ENDPOINTS === 'true', // vs just event endpoints
+    retentionDays: parseInt(process.env.LOG_RETENTION_DAYS) || 7,
+    minInterval: parseInt(process.env.API_LOG_MIN_INTERVAL) || 60, // seconds between writes per endpoint
+  },
 };
 
 // Validate required configuration
