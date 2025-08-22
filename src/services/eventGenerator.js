@@ -37,7 +37,6 @@ class EventGeneratorService {
 
     // Skip event generation on first poll (no previous data to compare)
     if (!previousData) {
-      console.log(`[EVENTS] First poll for ${endpoint}, storing initial state`);
       return events;
     }
 
@@ -47,7 +46,7 @@ class EventGeneratorService {
       const changeset = diff(previousData, currentData, diffOptions);
 
       if (changeset && changeset.length > 0) {
-        console.log(`[EVENTS] Detected ${changeset.length} changes for ${endpoint}`);
+        //console.log(`[EVENTS] Detected ${changeset.length} changes for ${endpoint}`);
         
         // Process changes based on endpoint type
         switch (endpoint) {
@@ -58,7 +57,7 @@ class EventGeneratorService {
           events.push(...this.processDrawChanges(changeset, currentData));
           break;
         default:
-          console.log(`[EVENTS] No change handler for endpoint: ${endpoint}`);
+          //console.log(`[EVENTS] No change handler for endpoint: ${endpoint}`);
         }
       }
     } catch (error) {
@@ -95,7 +94,6 @@ class EventGeneratorService {
       const allMatches = [...currentMatches, ...previousMatches];
       const keyField = this.determineBestKeyField(allMatches);
         
-      console.log(`[EVENTS] determineBestKeyField returned: ${keyField} for ${allMatches.length} matches`);
         
       if (keyField) {
         // Use the detected key field for better match tracking
@@ -150,7 +148,7 @@ class EventGeneratorService {
     if (!previousData) {
       previousData = this.previousStates.get('/api/live-matches');
       if (!previousData) {
-        console.log('[EVENTS] No previous data for live matches, skipping event generation');
+        //console.log('[EVENTS] No previous data for live matches, skipping event generation');
         return events;
       }
     }
@@ -163,8 +161,6 @@ class EventGeneratorService {
     const previousMatchMap = this.createMatchMap(previousMatches);
     const currentMatchMap = this.createMatchMap(currentMatches);
     
-    console.log(`[EVENTS] Key-based comparison: ${previousMatchMap.size} previous matches, ${currentMatchMap.size} current matches`);
-
     // Find newly added matches (in current but not in previous)
     for (const [matchId, match] of currentMatchMap) {
       if (!previousMatchMap.has(matchId)) {
@@ -196,7 +192,7 @@ class EventGeneratorService {
         // Compare relevant fields for changes
         const fieldChanges = this.detectMatchFieldChanges(previousMatch, currentMatch);
         if (fieldChanges.length > 0) {
-          console.log(`[EVENTS] Match ${matchId} field changes:`, fieldChanges.map(c => `${c.field}: ${c.oldValue} -> ${c.newValue}`));
+          //console.log(`[EVENTS] Match ${matchId} field changes:`, fieldChanges.map(c => `${c.field}: ${c.oldValue} -> ${c.newValue}`));
           const changeEvents = this.createEventFromFieldChanges(fieldChanges, currentMatch, matchId);
           events.push(...changeEvents);
         }
@@ -206,7 +202,7 @@ class EventGeneratorService {
     // Deduplicate events to prevent multiple events for the same match in one cycle
     const deduplicatedEvents = this.deduplicateEvents(events);
     
-    console.log(`[EVENTS] events generated (${events.length} -> ${deduplicatedEvents.length} after deduplication): ${JSON.stringify(deduplicatedEvents, null, 2)}`);
+    //console.log(`[EVENTS] events generated (${events.length} -> ${deduplicatedEvents.length} after deduplication): ${JSON.stringify(deduplicatedEvents, null, 2)}`);
     return deduplicatedEvents;
   }
 
