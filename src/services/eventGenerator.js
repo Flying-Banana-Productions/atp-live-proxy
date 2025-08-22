@@ -52,7 +52,7 @@ class EventGeneratorService {
         // Process changes based on endpoint type
         switch (endpoint) {
         case '/api/live-matches':
-          events.push(...this.processLiveMatchChanges(changeset, currentData));
+          events.push(...this.processLiveMatchChanges(changeset, currentData, previousData));
           break;
         case '/api/draws/live':
           events.push(...this.processDrawChanges(changeset, currentData));
@@ -140,16 +140,19 @@ class EventGeneratorService {
    * Process live match changes using key-based comparison
    * @param {Array} changeset - Array of atomic changes (ignored - kept for API compatibility)
    * @param {Object} currentData - Current match data for context
+   * @param {Object} previousData - Previous match data for comparison (optional, will use state if not provided)
    * @returns {Array} Generated match events
    */
-  processLiveMatchChanges(changeset, currentData) {
+  processLiveMatchChanges(changeset, currentData, previousData = null) {
     const events = [];
     
-    // Get previous data for comparison
-    const previousData = this.previousStates.get('/api/live-matches');
+    // Get previous data for comparison - use parameter if provided, otherwise fallback to state
     if (!previousData) {
-      console.log('[EVENTS] No previous data for live matches, skipping event generation');
-      return events;
+      previousData = this.previousStates.get('/api/live-matches');
+      if (!previousData) {
+        console.log('[EVENTS] No previous data for live matches, skipping event generation');
+        return events;
+      }
     }
 
     // Extract matches from both datasets
