@@ -6,13 +6,17 @@
  * @param {Function} next - Express next function
  */
 function errorHandler(err, req, res, next) {
-  console.error('Error:', {
-    message: err.message,
-    stack: err.stack,
-    url: req.url,
-    method: req.method,
-    timestamp: new Date().toISOString(),
-  });
+
+  // No verbose error logging for 404 (not found) responses; typically this is the same as an empty set
+  if(err.status !== 404) {
+    console.error('Error:', {
+      message: err.message,
+      stack: err.stack,
+      url: req.url,
+      method: req.method,
+      timestamp: new Date().toISOString(),
+    });
+  }
 
   // If response has already been sent, delegate to default error handler
   if (res.headersSent) {
