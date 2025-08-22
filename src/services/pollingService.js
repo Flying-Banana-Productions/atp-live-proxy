@@ -13,10 +13,12 @@ const config = require('../config');
  */
 class PollingService {
   constructor() {
-    this.pollingIntervals = new Map();
+    this.pollingTimeouts = new Map(); // Changed from intervals to timeouts
     this.isRunning = false;
     // Track polling reasons for each endpoint: 'subscription', 'events', or both
     this.pollingReasons = new Map();
+    // Track back-off state for each endpoint
+    this.backoffStates = new Map();
   }
 
   /**
@@ -46,12 +48,13 @@ class PollingService {
   stop() {
     this.isRunning = false;
     
-    // Clear all polling intervals
-    for (const [endpoint, interval] of this.pollingIntervals) {
-      clearInterval(interval);
+    // Clear all polling timeouts
+    for (const [endpoint, timeout] of this.pollingTimeouts) {
+      clearTimeout(timeout);
       console.log(`[POLLING] Stopped polling for ${endpoint}`);
     }
-    this.pollingIntervals.clear();
+    this.pollingTimeouts.clear();
+    this.backoffStates.clear();
     
     console.log('[POLLING] Background polling service stopped');
   }
@@ -95,28 +98,25 @@ class PollingService {
     existingReasons.add(reason);
     this.pollingReasons.set(endpoint, existingReasons);
 
-    if (this.pollingIntervals.has(endpoint)) {
+    if (this.pollingTimeouts.has(endpoint)) {
       console.log(`[POLLING] Already polling for ${endpoint}, added reason: ${reason}`);
       return;
     }
 
-    const ttl = getEndpointTtl(endpoint);
-    const intervalMs = ttl * 1000; // Convert to milliseconds
+    // Initialize back-off state for this endpoint
+    const baseTtl = getEndpointTtl(endpoint);
+    this.backoffStates.set(endpoint, {
+      baseInterval: baseTtl * 1000, // Convert to milliseconds
+      currentMultiplier: 1,
+      consecutiveErrors: 0,
+      isBackedOff: false
+    });
 
     const reasonsStr = Array.from(existingReasons).join('+');
-    console.log(`[POLLING] Starting to poll ${endpoint} every ${ttl} seconds (${reasonsStr})`);
+    console.log(`[POLLING] Starting to poll ${endpoint} every ${baseTtl} seconds (${reasonsStr})`);
 
-    // Initial fetch
-    this.fetchAndBroadcast(endpoint);
-
-    // Set up interval
-    const interval = setInterval(() => {
-      if (this.isRunning) {
-        this.fetchAndBroadcast(endpoint);
-      }
-    }, intervalMs);
-
-    this.pollingIntervals.set(endpoint, interval);
+    // Start the polling cycle
+    this.scheduleNextPoll(endpoint);
   }
 
   /**
@@ -135,11 +135,12 @@ class PollingService {
     
     if (reasons.size === 0) {
       // No more reasons to poll, stop completely
-      const interval = this.pollingIntervals.get(endpoint);
-      if (interval) {
-        clearInterval(interval);
-        this.pollingIntervals.delete(endpoint);
+      const timeout = this.pollingTimeouts.get(endpoint);
+      if (timeout) {
+        clearTimeout(timeout);
+        this.pollingTimeouts.delete(endpoint);
         this.pollingReasons.delete(endpoint);
+        this.backoffStates.delete(endpoint);
         console.log(`[POLLING] Stopped polling for ${endpoint} (no more reasons)`);
       }
     } else {
@@ -147,6 +148,74 @@ class PollingService {
       const reasonsStr = Array.from(reasons).join('+');
       console.log(`[POLLING] Removed ${reason} reason for ${endpoint}, still polling for: ${reasonsStr}`);
     }
+  }
+
+  /**
+   * Schedule the next poll for an endpoint
+   * @param {string} endpoint - API endpoint path
+   */
+  scheduleNextPoll(endpoint) {
+    if (!this.isRunning || !this.pollingReasons.has(endpoint)) {
+      return;
+    }
+
+    // Perform the fetch
+    this.fetchAndBroadcast(endpoint).then(() => {
+      // Schedule next poll after fetch completes
+      const backoffState = this.backoffStates.get(endpoint);
+      if (backoffState) {
+        const nextInterval = backoffState.baseInterval * backoffState.currentMultiplier;
+        const timeout = setTimeout(() => {
+          this.scheduleNextPoll(endpoint);
+        }, nextInterval);
+        this.pollingTimeouts.set(endpoint, timeout);
+      }
+    });
+  }
+
+  /**
+   * Apply back-off to an endpoint's polling interval
+   * @param {string} endpoint - API endpoint path
+   */
+  applyBackoff(endpoint) {
+    const backoffState = this.backoffStates.get(endpoint);
+    if (!backoffState || !config.polling.backoff.enabled) {
+      return;
+    }
+
+    const previousMultiplier = backoffState.currentMultiplier;
+    backoffState.currentMultiplier = Math.min(
+      backoffState.currentMultiplier * config.polling.backoff.multiplier,
+      config.polling.backoff.maxMultiplier
+    );
+    backoffState.consecutiveErrors++;
+    backoffState.isBackedOff = true;
+
+    const baseTtlSeconds = backoffState.baseInterval / 1000;
+    const newIntervalSeconds = Math.round((backoffState.baseInterval * backoffState.currentMultiplier) / 1000);
+    
+    console.log(`[POLLING BACKOFF] ${endpoint}: Backing off from ${baseTtlSeconds * previousMultiplier}s to ${newIntervalSeconds}s (${backoffState.consecutiveErrors} consecutive 404s)`);
+  }
+
+  /**
+   * Reset back-off for an endpoint
+   * @param {string} endpoint - API endpoint path
+   */
+  resetBackoff(endpoint) {
+    const backoffState = this.backoffStates.get(endpoint);
+    if (!backoffState || !config.polling.backoff.resetOnSuccess) {
+      return;
+    }
+
+    if (backoffState.isBackedOff) {
+      const previousInterval = (backoffState.baseInterval * backoffState.currentMultiplier) / 1000;
+      const baseInterval = backoffState.baseInterval / 1000;
+      console.log(`[POLLING BACKOFF] ${endpoint}: Resetting back-off from ${previousInterval}s to ${baseInterval}s (data available again)`);
+    }
+
+    backoffState.currentMultiplier = 1;
+    backoffState.consecutiveErrors = 0;
+    backoffState.isBackedOff = false;
   }
 
   /**
@@ -158,9 +227,20 @@ class PollingService {
       console.log(`[POLLING] Fetching data for ${endpoint}`);
       
       // Fetch fresh data from ATP API
-      const data = await this.fetchEndpointData(endpoint);
+      const result = await this.fetchEndpointData(endpoint);
       
-      if (data) {
+      if (result && result.status === 404) {
+        // Apply back-off for 404 responses
+        this.applyBackoff(endpoint);
+        return; // Don't broadcast or cache 404s
+      }
+      
+      if (result && result.data) {
+        // Reset back-off on successful response
+        this.resetBackoff(endpoint);
+        
+        const data = result.data;
+        
         // Log API response if logging is enabled and this is an event-monitored endpoint
         if (config.apiLogging.enabled && this.shouldLogEndpoint(endpoint)) {
           await apiLogger.logResponse(endpoint, data, {
@@ -202,7 +282,7 @@ class PollingService {
   /**
    * Fetch data for a specific endpoint
    * @param {string} endpoint - API endpoint path
-   * @returns {Object} API response data
+   * @returns {Object} API response with status { data, status }
    */
   async fetchEndpointData(endpoint) {
     // Map endpoint paths to ATP API methods
@@ -226,8 +306,14 @@ class PollingService {
     }
 
     try {
-      return await apiMethod();
+      const data = await apiMethod();
+      return { data, status: 200 };
     } catch (error) {
+      // Check if it's a 404 error
+      if (error && error.status === 404) {
+        console.log(`[POLLING] 404 response for ${endpoint} - no data available`);
+        return { data: null, status: 404 };
+      }
       console.error(`[POLLING] Error calling API method for ${endpoint}:`, error.message);
       return null;
     }
@@ -289,11 +375,27 @@ class PollingService {
       endpointReasons[endpoint] = Array.from(reasons);
     }
 
+    // Collect back-off states
+    const backoffInfo = {};
+    for (const [endpoint, state] of this.backoffStates) {
+      if (state.isBackedOff) {
+        backoffInfo[endpoint] = {
+          currentInterval: (state.baseInterval * state.currentMultiplier) / 1000,
+          baseInterval: state.baseInterval / 1000,
+          multiplier: state.currentMultiplier,
+          consecutiveErrors: state.consecutiveErrors,
+          isBackedOff: state.isBackedOff
+        };
+      }
+    }
+
     return {
       isRunning: this.isRunning,
-      activeEndpoints: Array.from(this.pollingIntervals.keys()),
-      totalActiveEndpoints: this.pollingIntervals.size,
+      activeEndpoints: Array.from(this.pollingTimeouts.keys()),
+      totalActiveEndpoints: this.pollingTimeouts.size,
       pollingReasons: endpointReasons,
+      backoffStates: backoffInfo,
+      backoffConfig: config.polling.backoff,
       eventEndpoints: config.events.enabled ? config.events.endpoints : [],
       eventsEnabled: config.events.enabled,
     };

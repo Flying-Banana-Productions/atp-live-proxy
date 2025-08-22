@@ -44,6 +44,14 @@ const config = {
     url: process.env.REDIS_URL,
     flushOnStartup: process.env.REDIS_FLUSH_ON_STARTUP !== 'false', // Default to true, set to 'false' to disable
   },
+  polling: {
+    backoff: {
+      enabled: process.env.POLLING_BACKOFF_ENABLED !== 'false', // Default to enabled
+      multiplier: parseFloat(process.env.POLLING_BACKOFF_MULTIPLIER) || 1.5, // Double interval on each 404
+      maxMultiplier: parseFloat(process.env.POLLING_BACKOFF_MAX_MULTIPLIER) || 30, // Cap at 30x base interval (e.g., 10s → 5min)
+      resetOnSuccess: process.env.POLLING_BACKOFF_RESET_ON_SUCCESS !== 'false', // Reset back-off on successful response
+    }
+  },
   events: {
     enabled: process.env.EVENTS_ENABLED !== 'false', // Default to enabled, set to 'false' to disable
     endpoints: (process.env.EVENTS_ENDPOINTS || '/api/live-matches,/api/draws/live').split(','),

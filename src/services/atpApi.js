@@ -183,8 +183,6 @@ class AtpApiService {
       // Server responded with error status
       const { status, statusText, data } = error.response;
 
-      // 404 means no results, not an error
-      if(status == 404) return;
       const apiError = new Error(`ATP API Error: ${status} ${statusText}`);
       apiError.status = status;
       apiError.statusText = statusText;
