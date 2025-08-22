@@ -17,7 +17,7 @@ jest.mock('../services/cache', () => ({
 }));
 
 const atpApi = require('../services/atpApi');
-const cacheService = require('../services/cache');
+// const cacheService = require('../services/cache');
 
 // Set test environment
 process.env.NODE_ENV = 'test';
@@ -103,7 +103,7 @@ describe('Event-Driven Polling Integration', () => {
     });
 
     it('should continue event generation when WebSocket subscriptions change', async () => {
-      const processDataSpy = jest.spyOn(eventGenerator, 'processData');
+      // const processDataSpy = jest.spyOn(eventGenerator, 'processData');
       
       // Start with no subscriptions
       pollingService.start(null);

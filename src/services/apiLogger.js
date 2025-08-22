@@ -189,7 +189,7 @@ class ApiLoggerService {
       
       // This is a basic implementation - could be enhanced to recursively clean directories
       // For now, just log the intent
-      console.log(`[API LOGGER] Cleanup functionality can be implemented based on specific needs`);
+      console.log('[API LOGGER] Cleanup functionality can be implemented based on specific needs');
       
     } catch (error) {
       console.error('[API LOGGER] Cleanup failed:', error.message);

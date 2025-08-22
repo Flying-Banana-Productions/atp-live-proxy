@@ -15,6 +15,11 @@ const EVENT_TYPES = {
   MATCH_DELAYED: 'match_delayed',
   PLAYER_RETIRED: 'player_retired',
   MEDICAL_TIMEOUT: 'medical_timeout',
+  TOILET_BREAK: 'toilet_break',
+  CHALLENGE_IN_PROGRESS: 'challenge_in_progress',
+  CORRECTION_MODE: 'correction_mode',
+  WARMUP_STARTED: 'warmup_started',
+  UMPIRE_ON_COURT: 'umpire_on_court',
   DRAW_UPDATED: 'draw_updated',
   DRAW_PAIRING_ANNOUNCED: 'draw_pairing_announced'
 };

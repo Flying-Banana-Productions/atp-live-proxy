@@ -51,14 +51,14 @@ class EventGeneratorService {
         
         // Process changes based on endpoint type
         switch (endpoint) {
-          case '/api/live-matches':
-            events.push(...this.processLiveMatchChanges(changeset, currentData));
-            break;
-          case '/api/draws/live':
-            events.push(...this.processDrawChanges(changeset, currentData));
-            break;
-          default:
-            console.log(`[EVENTS] No change handler for endpoint: ${endpoint}`);
+        case '/api/live-matches':
+          events.push(...this.processLiveMatchChanges(changeset, currentData));
+          break;
+        case '/api/draws/live':
+          events.push(...this.processDrawChanges(changeset, currentData));
+          break;
+        default:
+          console.log(`[EVENTS] No change handler for endpoint: ${endpoint}`);
         }
       }
     } catch (error) {
@@ -88,124 +88,115 @@ class EventGeneratorService {
     };
 
     switch (endpoint) {
-      case '/api/live-matches':
-        // Determine the best key field to use based on actual data from both current and previous
-        const currentMatches = this.extractMatches(currentData || {});
-        const previousMatches = this.extractMatches(previousData || {});
-        const allMatches = [...currentMatches, ...previousMatches];
-        const keyField = this.determineBestKeyField(allMatches);
+    case '/api/live-matches': {
+      // Determine the best key field to use based on actual data from both current and previous
+      const currentMatches = this.extractMatches(currentData || {});
+      const previousMatches = this.extractMatches(previousData || {});
+      const allMatches = [...currentMatches, ...previousMatches];
+      const keyField = this.determineBestKeyField(allMatches);
         
-        console.log(`[EVENTS] determineBestKeyField returned: ${keyField} for ${allMatches.length} matches`);
+      console.log(`[EVENTS] determineBestKeyField returned: ${keyField} for ${allMatches.length} matches`);
         
-        if (keyField) {
-          // Use the detected key field for better match tracking
-          // Handle nested structure: TournamentMatches[0].Matches[n]
-          return {
-            ...baseOptions,
-            embeddedObjKeys: {
-              'TournamentMatches': '$index',  // Tournament level uses index
-              'Matches': keyField,            // Match level uses MatchId
-              'matches': keyField,
-              'data': keyField
-            }
-          };
-        } else {
-          // Fallback to index-based if no consistent key field found
-          // Handle nested structure: TournamentMatches[0].Matches[n]
-          return {
-            ...baseOptions,
-            embeddedObjKeys: {
-              'TournamentMatches': '$index',
-              'Matches': '$index',
-              'matches': '$index',
-              'data': '$index'
-            }
-          };
-        }
-      case '/api/draws/live':
+      if (keyField) {
+        // Use the detected key field for better match tracking
+        // Handle nested structure: TournamentMatches[0].Matches[n]
         return {
           ...baseOptions,
           embeddedObjKeys: {
-            'draws': '$index',
-            'matches': '$index'
+            'TournamentMatches': '$index',  // Tournament level uses index
+            'Matches': keyField,            // Match level uses MatchId
+            'matches': keyField,
+            'data': keyField
           }
         };
-      default:
-        return baseOptions;
+      } else {
+        // Fallback to index-based if no consistent key field found
+        // Handle nested structure: TournamentMatches[0].Matches[n]
+        return {
+          ...baseOptions,
+          embeddedObjKeys: {
+            'TournamentMatches': '$index',
+            'Matches': '$index',
+            'matches': '$index',
+            'data': '$index'
+          }
+        };
+      }
+    }
+    case '/api/draws/live':
+      return {
+        ...baseOptions,
+        embeddedObjKeys: {
+          'draws': '$index',
+          'matches': '$index'
+        }
+      };
+    default:
+      return baseOptions;
     }
   }
 
   /**
-   * Process live match changes from JSON diff changeset
-   * @param {Array} changeset - Array of atomic changes
+   * Process live match changes using key-based comparison
+   * @param {Array} changeset - Array of atomic changes (ignored - kept for API compatibility)
    * @param {Object} currentData - Current match data for context
    * @returns {Array} Generated match events
    */
   processLiveMatchChanges(changeset, currentData) {
     const events = [];
-    const currentMatches = this.extractMatches(currentData);
-    const matchMap = this.createMatchMap(currentMatches);
     
-    for (const change of changeset) {
-      try {
-        // Handle nested changeset structure from json-diff-ts
-        if (change.type === 'UPDATE' && change.changes) {
-          // Handle different container names (TournamentMatches, matches, data, or root array)
-          const containerKey = change.key;
-          if (containerKey === 'TournamentMatches' || containerKey === 'matches' || containerKey === 'data' || !containerKey) {
-            for (const subChange of change.changes) {
-              // For nested ATP structure, check if this is changes to a Matches array
-              if (subChange.type === 'UPDATE' && subChange.key === 'Matches' && subChange.changes) {
-                // This is changes to the Matches array within a tournament
-                for (const matchChange of subChange.changes) {
-                  const matchEvents = this.createEventFromMatchChange(matchChange, matchMap);
-                  if (matchEvents && matchEvents.length > 0) {
-                    events.push(...matchEvents);
-                  }
-                }
-              } 
-              // For nested structure, check if this is a tournament change that contains Matches changes
-              else if (subChange.type === 'UPDATE' && /^\d+$/.test(subChange.key) && subChange.changes) {
-                // This could be a tournament index change - check if it contains Matches changes
-                for (const tournamentChange of subChange.changes) {
-                  if (tournamentChange.type === 'UPDATE' && tournamentChange.key === 'Matches' && tournamentChange.changes) {
-                    // This is the nested structure: TournamentMatches[0].Matches changes
-                    for (const matchChange of tournamentChange.changes) {
-                      const matchEvents = this.createEventFromMatchChange(matchChange, matchMap);
-                      if (matchEvents && matchEvents.length > 0) {
-                        events.push(...matchEvents);
-                      }
-                    }
-                  } else {
-                    // This is a direct match change in the flat structure (TournamentMatches[0] is a match)
-                    const matchEvents = this.createEventFromMatchChange(tournamentChange, matchMap);
-                    if (matchEvents && matchEvents.length > 0) {
-                      events.push(...matchEvents);
-                    }
-                  }
-                }
-              } 
-              // Handle other direct changes (ADD/REMOVE etc.)
-              else {
-                const subEvents = this.createEventFromMatchChange(subChange, matchMap);
-                if (subEvents && subEvents.length > 0) {
-                  events.push(...subEvents);
-                }
-              }
-            }
-          }
+    // Get previous data for comparison
+    const previousData = this.previousStates.get('/api/live-matches');
+    if (!previousData) {
+      console.log('[EVENTS] No previous data for live matches, skipping event generation');
+      return events;
+    }
+
+    // Extract matches from both datasets
+    const previousMatches = this.extractMatches(previousData);
+    const currentMatches = this.extractMatches(currentData);
+    
+    // Create maps keyed by MatchId for accurate comparison
+    const previousMatchMap = this.createMatchMap(previousMatches);
+    const currentMatchMap = this.createMatchMap(currentMatches);
+    
+    console.log(`[EVENTS] Key-based comparison: ${previousMatchMap.size} previous matches, ${currentMatchMap.size} current matches`);
+
+    // Find newly added matches (in current but not in previous)
+    for (const [matchId, match] of currentMatchMap) {
+      if (!previousMatchMap.has(matchId)) {
+        console.log(`[EVENTS] New match detected: ${matchId}`);
+        // Only create started event if match is not finished
+        const matchStatus = this.extractStatus(match);
+        if (matchStatus !== 'F') {
+          const startedEvent = this.createMatchStartedEvent(match);
+          if (startedEvent) events.push(startedEvent);
+        } else {
+          console.log(`[EVENTS] Skipping match started event for new match ${matchId} - already finished (status: ${matchStatus})`);
         }
-        // Handle direct array changes (when data is an array at root level)
-        else if ((change.type === 'ADD' || change.type === 'REMOVE') && change.value) {
-          const event = change.type === 'ADD' 
-            ? this.createMatchStartedEvent(change.value)
-            : this.createMatchFinishedEvent(change.value);
-          if (event) {
-            events.push(event);
-          }
+      }
+    }
+
+    // Find removed matches (in previous but not in current)  
+    for (const [matchId, match] of previousMatchMap) {
+      if (!currentMatchMap.has(matchId)) {
+        console.log(`[EVENTS] Match removed: ${matchId}`);
+        const finishedEvent = this.createMatchFinishedEvent(match);
+        if (finishedEvent) events.push(finishedEvent);
+      }
+    }
+
+    // Find updated matches (same MatchId in both, but fields changed)
+    for (const [matchId, currentMatch] of currentMatchMap) {
+      const previousMatch = previousMatchMap.get(matchId);
+      if (previousMatch) {
+        // Compare relevant fields for changes
+        const fieldChanges = this.detectMatchFieldChanges(previousMatch, currentMatch);
+        if (fieldChanges.length > 0) {
+          console.log(`[EVENTS] Match ${matchId} field changes:`, fieldChanges.map(c => `${c.field}: ${c.oldValue} -> ${c.newValue}`));
+          const changeEvents = this.createEventFromFieldChanges(fieldChanges, currentMatch, matchId);
+          events.push(...changeEvents);
         }
-      } catch (error) {
-        console.error('[EVENTS] Error creating event from change:', error.message);
       }
     }
 
@@ -216,6 +207,7 @@ class EventGeneratorService {
     return deduplicatedEvents;
   }
 
+
   /**
    * Create specific events from a match-level change
    * @param {Object} change - Match change from json-diff-ts
@@ -223,73 +215,109 @@ class EventGeneratorService {
    * @returns {Array} Array of generated events
    */
   createEventFromMatchChange(change, matchMap) {
-    const { type, key, value, oldValue, changes } = change;
+    const { type, key, value, changes } = change;
 
     switch (type) {
-      case 'ADD':
-        // New match added
-        if (value) {
-          const matchId = this.extractMatchId(value);
-          if (matchId) {
-            // Only create "started" event if match is actually in progress
-            const matchStatus = this.extractStatus(value);
-            if (matchStatus !== 'F' && matchStatus !== 'finished') {
-              return [this.createMatchStartedEvent(value)];
-            } else {
-              console.log(`[EVENTS] Skipping match started event for ADD ${matchId} - match is already finished (status: ${matchStatus})`);
-              return [];
-            }
+    case 'ADD':
+      // New match added
+      if (value) {
+        const matchId = this.extractMatchId(value);
+        if (matchId) {
+          // Only create "started" event if match is actually in progress
+          const matchStatus = this.extractStatus(value);
+          if (matchStatus !== 'F' && matchStatus !== 'finished') {
+            return [this.createMatchStartedEvent(value)];
+          } else {
+            console.log(`[EVENTS] Skipping match started event for ADD ${matchId} - match is already finished (status: ${matchStatus})`);
+            return [];
           }
         }
-        break;
+      }
+      break;
 
-      case 'REMOVE':
-        // Match removed (finished)
-        if (value) {
-          const matchId = this.extractMatchId(value);
-          if (matchId) {
-            return [this.createMatchFinishedEvent(value)];
+    case 'REMOVE':
+      // Match removed (finished)
+      if (value) {
+        const matchId = this.extractMatchId(value);
+        if (matchId) {
+          return [this.createMatchFinishedEvent(value)];
+        }
+      }
+      break;
+
+    case 'UPDATE':
+      // Match field updated - look at nested changes
+      if (changes) {
+        let match = null;
+        let matchId = null;
+
+        // If key looks like a match ID (string), try to find it in the match map
+        if (typeof key === 'string' && matchMap.has(key)) {
+          match = matchMap.get(key);
+          matchId = key;
+        }
+        // Otherwise, try to find match by index in current data  
+        else if (typeof key === 'string' || typeof key === 'number') {
+          const matches = Array.from(matchMap.values());
+          const index = parseInt(key, 10);
+          if (!isNaN(index) && matches[index]) {
+            match = matches[index];
+            matchId = this.extractMatchId(match);
           }
         }
-        break;
 
-      case 'UPDATE':
-        // Match field updated - look at nested changes
-        if (changes) {
-          let match = null;
-          let matchId = null;
-
-          // If key looks like a match ID (string), try to find it in the match map
-          if (typeof key === 'string' && matchMap.has(key)) {
-            match = matchMap.get(key);
-            matchId = key;
-          }
-          // Otherwise, try to find match by index in current data  
-          else if (typeof key === 'string' || typeof key === 'number') {
-            const matches = Array.from(matchMap.values());
-            const index = parseInt(key, 10);
-            if (!isNaN(index) && matches[index]) {
-              match = matches[index];
-              matchId = this.extractMatchId(match);
-            }
-          }
-
-          if (match && matchId && changes) {
-            return this.createEventFromFieldChanges(changes, match, matchId);
-          }
+        if (match && matchId && changes) {
+          return this.createEventFromFieldChanges(changes, match, matchId);
         }
-        break;
+      }
+      break;
 
-      default:
-        break;
+    default:
+      break;
     }
 
     return [];
   }
 
   /**
+   * Detect field changes between two match objects
+   * @param {Object} previousMatch - Previous match state
+   * @param {Object} currentMatch - Current match state
+   * @returns {Array} Array of field change objects
+   */
+  detectMatchFieldChanges(previousMatch, currentMatch) {
+    const changes = [];
+    
+    // List of fields to monitor for changes
+    const fieldsToCheck = [
+      { field: 'ResultString', name: 'score' },
+      { field: 'Status', name: 'status' },
+      { field: 'CourtName', name: 'court' },
+      { field: 'MatchTime', name: 'matchTime' },
+      { field: 'Serve', name: 'serve' }
+    ];
+    
+    for (const { field, name } of fieldsToCheck) {
+      const oldValue = previousMatch[field];
+      const newValue = currentMatch[field];
+      
+      // Check for actual changes (handle null/undefined comparison)
+      if (oldValue !== newValue) {
+        changes.push({
+          field: name,
+          fieldPath: field,
+          oldValue,
+          newValue
+        });
+      }
+    }
+    
+    return changes;
+  }
+
+  /**
    * Create events from field-level changes within a match
-   * @param {Array} changes - Array of field changes from json-diff-ts
+   * @param {Array} changes - Array of field change objects
    * @param {Object} match - Current match object
    * @param {string} matchId - Match identifier
    * @returns {Array} Array of generated events
@@ -299,31 +327,9 @@ class EventGeneratorService {
     
     // Process each field change and generate appropriate events
     for (const fieldChange of changes) {
-      const { type, key: fieldName, value: newValue, oldValue } = fieldChange;
-
-      if (type !== 'UPDATE') continue;
+      const { field: fieldName, oldValue, newValue } = fieldChange;
 
       let event = null;
-
-      // MatchId changes indicate a match replacement (remove old + add new)
-      if (fieldName === 'MatchId' || fieldName === 'matchId' || fieldName === 'id' || fieldName === 'match_id') {
-        console.log(`[EVENTS] MatchId change detected: ${oldValue} -> ${newValue}`);
-        
-        // Create finished event for old match
-        const oldMatch = { ...match, [fieldName]: oldValue };
-        const finishedEvent = this.createMatchFinishedEvent(oldMatch);
-        if (finishedEvent) events.push(finishedEvent);
-        
-        // Create started event for new match - but only if it's actually in progress
-        const matchStatus = this.extractStatus(match);
-        if (matchStatus !== 'F' && matchStatus !== 'finished') {
-          const startedEvent = this.createMatchStartedEvent(match);
-          if (startedEvent) events.push(startedEvent);
-        } else {
-          console.log(`[EVENTS] Skipping match started event for ${newValue} - match is already finished (status: ${matchStatus})`);
-        }
-        continue; // Skip other processing for this change
-      }
 
       // Score changes
       if (fieldName === 'score') {
@@ -341,7 +347,7 @@ class EventGeneratorService {
       }
 
       // Court changes
-      else if (fieldName === 'court' || fieldName === 'courtName' || fieldName === 'venue') {
+      else if (fieldName === 'court') {
         event = this.createCourtChangeEvent(match, matchId, oldValue, newValue);
       }
 
@@ -579,6 +585,50 @@ class EventGeneratorService {
   }
 
   /**
+   * ATP Status code to event type mapping
+   * ATP Status codes: C=Umpire on court, W=Warmup, P=In progress, S=Suspended, 
+   * D=Toilet break, M=Medical timeout, R=Challenge in progress, E=Correction mode, F=Finished
+   */
+  getAtpStatusEventInfo(newStatus, oldStatus = null) {
+    // Handle direct status mappings
+    const statusEventMap = {
+      'S': { type: EVENT_TYPES.MATCH_SUSPENDED, priority: EVENT_PRIORITY.HIGH },
+      'M': { type: EVENT_TYPES.MEDICAL_TIMEOUT, priority: EVENT_PRIORITY.MEDIUM },
+      'D': { type: EVENT_TYPES.TOILET_BREAK, priority: EVENT_PRIORITY.LOW },
+      'R': { type: EVENT_TYPES.CHALLENGE_IN_PROGRESS, priority: EVENT_PRIORITY.MEDIUM },
+      'E': { type: EVENT_TYPES.CORRECTION_MODE, priority: EVENT_PRIORITY.LOW },
+      'C': { type: EVENT_TYPES.UMPIRE_ON_COURT, priority: EVENT_PRIORITY.MEDIUM },
+      'W': { type: EVENT_TYPES.WARMUP_STARTED, priority: EVENT_PRIORITY.LOW }
+    };
+
+    // Handle status transitions
+    if (oldStatus && newStatus !== oldStatus) {
+      const transition = `${oldStatus}->${newStatus}`;
+      switch (transition) {
+      case 'S->P':
+        return { type: EVENT_TYPES.MATCH_RESUMED, priority: EVENT_PRIORITY.HIGH };
+      case 'D->P':
+      case 'M->P':
+      case 'R->P':
+      case 'E->P':
+        return { type: EVENT_TYPES.MATCH_RESUMED, priority: EVENT_PRIORITY.MEDIUM };
+      case 'C->W':
+        return { type: EVENT_TYPES.WARMUP_STARTED, priority: EVENT_PRIORITY.LOW };
+      case 'W->P':
+        return { type: EVENT_TYPES.MATCH_STARTED, priority: EVENT_PRIORITY.HIGH };
+      }
+    }
+
+    // Use direct status mapping if available
+    if (statusEventMap[newStatus]) {
+      return statusEventMap[newStatus];
+    }
+
+    // Default to generic status change
+    return { type: EVENT_TYPES.SCORE_UPDATED, priority: EVENT_PRIORITY.MEDIUM };
+  }
+
+  /**
    * Create status change event
    * @param {Object} match - Match object
    * @param {string} matchId - Match ID
@@ -588,34 +638,51 @@ class EventGeneratorService {
    */
   createStatusChangeEvent(match, matchId, oldStatus, newStatus) {
     const players = this.extractPlayerNames(match);
-    let eventType = EVENT_TYPES.SCORE_UPDATED;
-    let priority = EVENT_PRIORITY.MEDIUM;
-
-    // Determine specific event type based on status
-    if (newStatus && typeof newStatus === 'string') {
-      const status = newStatus.toLowerCase();
-      if (status.includes('suspended')) {
-        eventType = EVENT_TYPES.MATCH_SUSPENDED;
-        priority = EVENT_PRIORITY.HIGH;
-      } else if (status.includes('resumed')) {
-        eventType = EVENT_TYPES.MATCH_RESUMED;
-        priority = EVENT_PRIORITY.HIGH;
-      } else if (status.includes('retired')) {
-        eventType = EVENT_TYPES.PLAYER_RETIRED;
-        priority = EVENT_PRIORITY.CRITICAL;
-      } else if (status.includes('delay')) {
-        eventType = EVENT_TYPES.MATCH_DELAYED;
-        priority = EVENT_PRIORITY.HIGH;
-      } else if (status.includes('medical')) {
-        eventType = EVENT_TYPES.MEDICAL_TIMEOUT;
-        priority = EVENT_PRIORITY.MEDIUM;
+    const statusInfo = this.getAtpStatusEventInfo(newStatus, oldStatus);
+    
+    let description = `Status change: ${players.join(' vs ')}`;
+    
+    // Create descriptive messages based on status
+    switch (newStatus) {
+    case 'C':
+      description = `Umpire on court: ${players.join(' vs ')}`;
+      break;
+    case 'W':
+      description = `Warmup started: ${players.join(' vs ')}`;
+      break;
+    case 'P':
+      if (oldStatus === 'S') {
+        description = `Match resumed: ${players.join(' vs ')}`;
+      } else if (oldStatus === 'W') {
+        description = `Match play began: ${players.join(' vs ')}`;
+      } else {
+        description = `Match in progress: ${players.join(' vs ')}`;
       }
+      break;
+    case 'S':
+      description = `Match suspended: ${players.join(' vs ')}`;
+      break;
+    case 'D':
+      description = `Toilet break: ${players.join(' vs ')}`;
+      break;
+    case 'M':
+      description = `Medical timeout: ${players.join(' vs ')}`;
+      break;
+    case 'R':
+      description = `Challenge in progress: ${players.join(' vs ')}`;
+      break;
+    case 'E':
+      description = `Correction mode: ${players.join(' vs ')}`;
+      break;
+    case 'F':
+      description = `Match finished: ${players.join(' vs ')}`;
+      break;
+    default:
+      description = `Status change: ${players.join(' vs ')} - ${newStatus}`;
     }
-
-    const description = `Status change: ${players.join(' vs ')} - ${newStatus}`;
     
     return createEvent(
-      eventType,
+      statusInfo.type,
       matchId,
       description,
       {
@@ -625,7 +692,7 @@ class EventGeneratorService {
         tournament: this.extractTournamentName(match),
         round: this.extractRound(match)
       },
-      { priority }
+      { priority: statusInfo.priority }
     );
   }
 
@@ -667,7 +734,7 @@ class EventGeneratorService {
    * @param {Object} currentData - Current draw data
    * @returns {Array} Generated draw events
    */
-  processDrawChanges(changeset, currentData) {
+  processDrawChanges(changeset, _currentData) {
     // Placeholder for future draw event detection using changeset
     console.log(`[EVENTS] Draw changes detected: ${changeset.length} changes`);
     return [];
