@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { diff } = require('json-diff-ts');
 const eventGeneratorInstance = require('../services/eventGenerator');
 
 /**
@@ -272,6 +273,136 @@ class LogReplay {
     });
 
     return stats;
+  }
+
+  /**
+   * Detect duplicate log files with identical data
+   * @param {Array} logFiles - Array of log file paths (must be sorted chronologically)
+   * @returns {Array} Array of duplicate file information
+   */
+  async detectDuplicates(logFiles) {
+    const duplicates = [];
+    let previousData = null;
+    let previousFile = null;
+    
+    for (let i = 0; i < logFiles.length; i++) {
+      const file = logFiles[i];
+      
+      try {
+        // Read and parse log file
+        const content = JSON.parse(fs.readFileSync(file, 'utf8'));
+        const currentData = content.data;
+        
+        // Compare with previous file's data
+        if (previousData) {
+          const changes = diff(previousData, currentData);
+          if (!changes || changes.length === 0) {
+            // Found a duplicate
+            const stats = fs.statSync(file);
+            duplicates.push({
+              original: previousFile,
+              originalIndex: i - 1,
+              duplicate: file,
+              duplicateIndex: i,
+              timestamp: content.timestamp,
+              size: stats.size,
+              sizeKB: (stats.size / 1024).toFixed(2)
+            });
+            
+            if (this.verbose) {
+              console.log(`[DUPLICATE] ${path.basename(file)} is identical to ${path.basename(previousFile)}`);
+            }
+          }
+        }
+        
+        // Update previous for next iteration
+        previousData = currentData;
+        previousFile = file;
+        
+      } catch (error) {
+        console.error(`Error reading file ${path.basename(file)}: ${error.message}`);
+      }
+    }
+    
+    return duplicates;
+  }
+
+  /**
+   * Prune duplicate log files
+   * @param {Array} duplicates - Array of duplicate information from detectDuplicates
+   * @param {boolean} dryRun - If true, only simulate deletion
+   * @returns {Object} Pruning results
+   */
+  async pruneDuplicates(duplicates, dryRun = false) {
+    const results = {
+      deleted: [],
+      errors: [],
+      bytesFreed: 0,
+      filesDeleted: 0,
+      dryRun
+    };
+    
+    for (const dup of duplicates) {
+      try {
+        const filePath = dup.duplicate;
+        const fileName = path.basename(filePath);
+        const stats = fs.statSync(filePath);
+        const size = stats.size;
+        
+        if (!dryRun) {
+          // Actually delete the file
+          fs.unlinkSync(filePath);
+        }
+        
+        results.deleted.push({
+          file: fileName,
+          fullPath: filePath,
+          size,
+          sizeKB: (size / 1024).toFixed(2),
+          originalFile: path.basename(dup.original),
+          timestamp: dup.timestamp
+        });
+        
+        results.bytesFreed += size;
+        results.filesDeleted++;
+        
+        if (this.verbose) {
+          const action = dryRun ? '[DRY RUN] Would delete' : '[DELETED]';
+          console.log(`${action} ${fileName} (${(size / 1024).toFixed(2)} KB)`);
+        }
+        
+      } catch (error) {
+        results.errors.push({
+          file: path.basename(dup.duplicate),
+          error: error.message
+        });
+        
+        if (this.verbose) {
+          console.error(`Error processing ${path.basename(dup.duplicate)}: ${error.message}`);
+        }
+      }
+    }
+    
+    return results;
+  }
+
+  /**
+   * Get summary statistics for duplicate detection
+   * @param {Array} duplicates - Array of duplicate information
+   * @returns {Object} Summary statistics
+   */
+  getDuplicateStats(duplicates) {
+    const totalSize = duplicates.reduce((sum, dup) => sum + dup.size, 0);
+    const uniqueOriginals = new Set(duplicates.map(d => d.original));
+    
+    return {
+      totalDuplicates: duplicates.length,
+      totalSizeBytes: totalSize,
+      totalSizeKB: (totalSize / 1024).toFixed(2),
+      totalSizeMB: (totalSize / 1024 / 1024).toFixed(2),
+      uniqueOriginals: uniqueOriginals.size,
+      averageSizeKB: duplicates.length > 0 ? (totalSize / duplicates.length / 1024).toFixed(2) : 0
+    };
   }
 }
 

@@ -5,7 +5,10 @@
  * - Table format: Human-readable table with colors
  * - JSON format: Machine-readable structured data  
  * - Summary format: Compact overview with statistics
+ * - Duplicates format: Display duplicate detection and pruning results
  */
+
+const path = require('path');
 
 /**
  * ANSI color codes for terminal output
@@ -240,11 +243,108 @@ function getEventTypeStats(events) {
   return stats;
 }
 
+/**
+ * Format duplicate detection results
+ * @param {Array} duplicates - Array of duplicate information
+ * @param {Object} pruneResults - Optional pruning results
+ * @param {boolean} colorsEnabled - Whether to use colors
+ * @returns {string} Formatted output
+ */
+function formatDuplicates(duplicates, pruneResults = null, colorsEnabled = true) {
+  const output = [];
+  
+  // Header
+  output.push(colorize('=== Duplicate Detection Results ===', colors.bright + colors.cyan, colorsEnabled));
+  output.push('');
+  
+  if (duplicates.length === 0) {
+    output.push(colorize('✓ No duplicate files found', colors.green, colorsEnabled));
+    return output.join('\n');
+  }
+  
+  // Summary stats
+  const totalSize = duplicates.reduce((sum, dup) => sum + dup.size, 0);
+  const totalSizeMB = (totalSize / 1024 / 1024).toFixed(2);
+  
+  output.push(colorize(`Found ${duplicates.length} duplicate file(s)`, colors.yellow, colorsEnabled));
+  output.push(colorize(`Total redundant space: ${totalSizeMB} MB`, colors.yellow, colorsEnabled));
+  output.push('');
+  
+  // List duplicates
+  output.push(colorize('Duplicate Files:', colors.cyan, colorsEnabled));
+  output.push(colorize('─'.repeat(60), colors.dim, colorsEnabled));
+  
+  duplicates.forEach((dup, index) => {
+    // Extract endpoint name (grandparent directory) and filename for better context
+    // Path structure: .../logs/api-responses/live-matches/2025-08-22/filename.json
+    const duplicateEndpoint = path.basename(path.dirname(path.dirname(dup.duplicate)));
+    const duplicateFile = path.basename(dup.duplicate);
+    const originalEndpoint = path.basename(path.dirname(path.dirname(dup.original)));
+    const originalFile = path.basename(dup.original);
+    
+    output.push('');
+    output.push(`${colorize(`[${index + 1}]`, colors.bright, colorsEnabled)} ${colorize(`${duplicateEndpoint}/${duplicateFile}`, colors.red, colorsEnabled)}`);
+    output.push(`    Size: ${dup.sizeKB} KB`);
+    output.push(`    Timestamp: ${dup.timestamp}`);
+    output.push(`    Identical to: ${colorize(`${originalEndpoint}/${originalFile}`, colors.green, colorsEnabled)}`);
+  });
+  
+  output.push('');
+  output.push(colorize('─'.repeat(60), colors.dim, colorsEnabled));
+  
+  // Pruning results if available
+  if (pruneResults) {
+    output.push('');
+    if (pruneResults.dryRun) {
+      output.push(colorize('=== Dry Run Results (no files deleted) ===', colors.yellow, colorsEnabled));
+    } else {
+      output.push(colorize('=== Pruning Results ===', colors.green, colorsEnabled));
+    }
+    output.push('');
+    
+    if (pruneResults.filesDeleted > 0 || pruneResults.deleted.length > 0) {
+      const freedMB = (pruneResults.bytesFreed / 1024 / 1024).toFixed(2);
+      const action = pruneResults.dryRun ? 'Would delete' : 'Deleted';
+      
+      output.push(colorize(`${action}: ${pruneResults.filesDeleted} file(s)`, colors.bright, colorsEnabled));
+      output.push(colorize(`Space ${pruneResults.dryRun ? 'to be freed' : 'freed'}: ${freedMB} MB`, colors.bright, colorsEnabled));
+      
+      if (pruneResults.deleted.length > 0) {
+        output.push('');
+        output.push(colorize('Files:', colors.cyan, colorsEnabled));
+        pruneResults.deleted.forEach(file => {
+          const prefix = pruneResults.dryRun ? '  - Would delete: ' : '  - Deleted: ';
+          // Extract endpoint name (grandparent directory) for context
+          const endpointDir = path.basename(path.dirname(path.dirname(file.fullPath)));
+          output.push(`${prefix}${endpointDir}/${file.file} (${file.sizeKB} KB)`);
+        });
+      }
+    }
+    
+    if (pruneResults.errors.length > 0) {
+      output.push('');
+      output.push(colorize('Errors:', colors.red, colorsEnabled));
+      pruneResults.errors.forEach(error => {
+        output.push(`  ✗ ${error.file}: ${error.error}`);
+      });
+    }
+  }
+  
+  // Recommendation
+  if (!pruneResults && duplicates.length > 0) {
+    output.push('');
+    output.push(colorize('To delete these duplicates, run with --prune', colors.dim, colorsEnabled));
+    output.push(colorize('To preview deletion, run with --prune-dry-run', colors.dim, colorsEnabled));
+  }
+  
+  return output.join('\n');
+}
 
 module.exports = {
   formatTable,
   formatJson, 
   formatSummary,
+  formatDuplicates,
   colors,
   colorize
 };

@@ -1,5 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
+const { diff } = require('json-diff-ts');
 const config = require('../config');
 
 /**
@@ -17,6 +18,8 @@ class ApiLoggerService {
     this.lastWriteTime = new Map();
     // Buffer latest data per endpoint (only keep most recent)
     this.bufferedData = new Map();
+    // Track previous data to detect changes
+    this.previousData = new Map();
     
     if (this.isEnabled) {
       console.log(`[API LOGGER] Enabled - logging to ${this.baseDir} with ${this.minInterval}s minimum interval`);
@@ -24,13 +27,24 @@ class ApiLoggerService {
   }
 
   /**
-   * Log an API response to disk with minimum interval buffering
+   * Log an API response to disk with minimum interval buffering and change detection
    * @param {string} endpoint - API endpoint path
    * @param {Object} data - Response data from ATP API
    * @param {Object} metadata - Additional metadata
    */
   async logResponse(endpoint, data, metadata = {}) {
     if (!this.isEnabled) return;
+
+    // Check if data has changed from previous
+    const previousData = this.previousData.get(endpoint);
+    if (previousData) {
+      const changes = diff(previousData, data);
+      if (!changes || changes.length === 0) {
+        // Data unchanged - skip logging
+        console.log(`[API LOGGER] Skipping ${endpoint} - no changes detected`);
+        return;
+      }
+    }
 
     const logEntry = {
       endpoint,
@@ -56,11 +70,13 @@ class ApiLoggerService {
       await this.writeLogFile(logEntry);
       this.lastWriteTime.set(endpoint, now);
       this.bufferedData.delete(endpoint);
-      console.log(`[API LOGGER] Wrote ${endpoint} after ${Math.round((now - lastWrite) / 1000)}s interval`);
+      // Update previous data after successful write
+      this.previousData.set(endpoint, data);
+      console.log(`[API LOGGER] Wrote ${endpoint} after ${Math.round((now - lastWrite) / 1000)}s interval (changes detected)`);
     } else {
       // Interval not elapsed - just buffer the data
       const nextWriteIn = Math.round((intervalMs - (now - lastWrite)) / 1000);
-      console.log(`[API LOGGER] Buffered ${endpoint} - next write in ${nextWriteIn}s`);
+      console.log(`[API LOGGER] Buffered ${endpoint} - next write in ${nextWriteIn}s (changes detected)`);
     }
   }
 
@@ -76,6 +92,8 @@ class ApiLoggerService {
       try {
         await this.writeLogFile(logEntry);
         this.lastWriteTime.set(endpoint, Date.now());
+        // Update previous data after successful flush
+        this.previousData.set(endpoint, logEntry.data);
         console.log(`[API LOGGER] Flushed buffered data for ${endpoint}`);
       } catch (error) {
         console.error(`[API LOGGER] Error flushing ${endpoint}:`, error.message);

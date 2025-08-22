@@ -13,7 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const { program } = require('commander');
 const LogReplay = require('./src/utils/logReplay');
-const { formatTable, formatJson, formatSummary } = require('./src/utils/outputFormatters');
+const { formatTable, formatJson, formatSummary, formatDuplicates } = require('./src/utils/outputFormatters');
 
 // CLI Configuration
 program
@@ -29,10 +29,16 @@ program
   .option('-o, --output <file>', 'Save results to file (optional)')
   .option('--no-colors', 'Disable colored output')
   .option('-v, --verbose', 'Show detailed logging information')
-  .option('--dry-run', 'Show files that would be processed without running replay');
+  .option('--dry-run', 'Show files that would be processed without running replay')
+  .option('--detect-duplicates', 'Detect log files with identical data')
+  .option('--prune', 'Delete redundant duplicate log files (keeps earliest)')
+  .option('--prune-dry-run', 'Show what files would be deleted without actually deleting');
 
 program.parse();
 const options = program.opts();
+
+// Track if format was explicitly set by user (not just the default)
+const formatExplicitlySet = process.argv.some(arg => arg.startsWith('--format') || arg === '-f');
 
 // Validate format option
 const validFormats = ['json', 'table', 'summary'];
@@ -74,8 +80,45 @@ async function main() {
       console.log(`Found ${files.length} log files to process`);
     }
 
+    // Duplicate detection mode
+    if (options.detectDuplicates) {
+      if (options.verbose) {
+        console.log('Detecting duplicate files...');
+      }
+      
+      const duplicates = await replayer.detectDuplicates(files);
+      let pruneResults = null;
+      
+      // Handle pruning if requested
+      if (options.prune || options.pruneDryRun) {
+        const dryRun = options.pruneDryRun || false;
+        if (options.verbose) {
+          const action = dryRun ? 'Simulating pruning' : 'Pruning duplicates';
+          console.log(`${action}...`);
+        }
+        pruneResults = await replayer.pruneDuplicates(duplicates, dryRun);
+      }
+      
+      // Format and display duplicate results
+      const output = formatDuplicates(duplicates, pruneResults, options.colors);
+      
+      if (options.output) {
+        fs.writeFileSync(options.output, output);
+        console.log(`Results saved to ${options.output}`);
+      } else {
+        console.log(output);
+      }
+      
+      // If only detecting duplicates (not continuing with replay), exit here  
+      // Continue with replay only if user explicitly specified a format for replay output
+      const shouldContinueWithReplay = formatExplicitlySet;
+      if (!shouldContinueWithReplay) {
+        return;
+      }
+    }
+
     // Dry run mode - just show files
-    if (options.dryRun) {
+    if (options.dryRun && !options.detectDuplicates) {
       console.log('Dry run mode - files that would be processed:');
       files.forEach((file, index) => {
         const timestamp = replayer.extractTimestamp(file);
@@ -83,6 +126,8 @@ async function main() {
       });
       return;
     }
+
+    // Skip replay if we only wanted duplicate detection (this is handled above now)
 
     // Process logs and generate events
     if (options.verbose) {
