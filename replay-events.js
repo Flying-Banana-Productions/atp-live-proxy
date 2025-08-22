@@ -21,7 +21,7 @@ program
   .description('Replay ATP API logs through the event generator')
   .version('1.0.0')
   .option('-d, --log-dir <path>', 'Path to log directory', './logs/api-responses')
-  .option('-e, --endpoint <name>', 'Filter by endpoint', 'live-matches')
+  .option('-e, --endpoint <name>', 'Filter by endpoint')
   .option('--date <YYYY-MM-DD>', 'Filter by specific date (default: latest)')
   .option('--start <HH:MM>', 'Start time filter')
   .option('--end <HH:MM>', 'End time filter')
@@ -44,6 +44,14 @@ const formatExplicitlySet = process.argv.some(arg => arg.startsWith('--format') 
 const validFormats = ['json', 'table', 'summary'];
 if (!validFormats.includes(options.format)) {
   console.error(`Error: Invalid format '${options.format}'. Must be one of: ${validFormats.join(', ')}`);
+  process.exit(1);
+}
+
+// Validate that --endpoint is specified when using --detect-duplicates
+if (options.detectDuplicates && !options.endpoint) {
+  console.error('Error: --endpoint <name> is required when using --detect-duplicates');
+  console.error('Usage: node replay-events.js --detect-duplicates --endpoint <endpoint>');
+  console.error('Available endpoints: live-matches, draws-live, etc.');
   process.exit(1);
 }
 
