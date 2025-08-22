@@ -523,68 +523,98 @@ describe('JSON Diff Event Generation System', () => {
         // Clear any previous state
         eventGenerator.clearStates();
         
-        // Test 1: Direct array format (some APIs might return this)
-        const arrayFormat = [{
-          MatchId: 'test_123',
-          PlayerTeam1: {
-            PlayerFirstName: 'John',
-            PlayerLastName: 'Smith'
-          },
-          PlayerTeam2: {
-            PlayerFirstName: 'Bob',
-            PlayerLastName: 'Jones'
-          },
-          ResultString: '00',
-          Status: 'P'
-        }];
-        
-        const events1 = eventGenerator.processData(endpoint, arrayFormat);
-        expect(events1).toHaveLength(0); // First poll, no previous state
-        
-        // Test 2: Object with 'matches' property (alternative structure)
-        const objectFormat = {
-          matches: [{
-            MatchId: 'test_456',
-            PlayerTeam1: {
-              PlayerFirstName: 'Mike',
-              PlayerLastName: 'Johnson'
-            },
-            PlayerTeam2: {
-              PlayerFirstName: 'Tom',
-              PlayerLastName: 'Wilson'
-            },
-            ResultString: '10',
-            Status: 'P'
-          }]
-        };
-        
-        const events2 = eventGenerator.processData(endpoint, objectFormat);
-        // Should detect: test_123 finished (disappeared), test_456 started (new)
-        expect(events2.length).toBeGreaterThanOrEqual(2);
-        
-        // Test 3: Nested TournamentMatches structure (ATP format)
-        const nestedFormat = {
+        // Test 1: ATP format with one match
+        const firstPoll = {
           TournamentMatches: [{
-            TournamentName: 'ATP Masters',
+            TournamentDisplayName: 'ATP Masters 1000',
+            TournamentId: 'tourn_001',
             Matches: [{
-              MatchId: 'test_789',
+              MatchId: 'test_123',
               PlayerTeam1: {
-                PlayerFirstName: 'Dave',
-                PlayerLastName: 'Brown'
+                PlayerFirstName: 'John',
+                PlayerLastName: 'Smith'
               },
               PlayerTeam2: {
-                PlayerFirstName: 'Steve',
-                PlayerLastName: 'Davis'
+                PlayerFirstName: 'Bob',
+                PlayerLastName: 'Jones'
               },
-              ResultString: '20',
+              ResultString: '00',
               Status: 'P'
             }]
           }]
         };
         
-        const events3 = eventGenerator.processData(endpoint, nestedFormat);
-        // Should detect: test_456 finished (disappeared), test_789 started (new)
-        expect(events3.length).toBeGreaterThanOrEqual(2);
+        const events1 = eventGenerator.processData(endpoint, firstPoll);
+        expect(events1).toHaveLength(0); // First poll, no previous state
+        
+        // Test 2: ATP format with match change (one match finished, new one started)
+        const secondPoll = {
+          TournamentMatches: [{
+            TournamentDisplayName: 'ATP Masters 1000',
+            TournamentId: 'tourn_001',
+            Matches: [{
+              MatchId: 'test_456',
+              PlayerTeam1: {
+                PlayerFirstName: 'Mike',
+                PlayerLastName: 'Johnson'
+              },
+              PlayerTeam2: {
+                PlayerFirstName: 'Tom',
+                PlayerLastName: 'Wilson'
+              },
+              ResultString: '10',
+              Status: 'P'
+            }]
+          }]
+        };
+        
+        const events2 = eventGenerator.processData(endpoint, secondPoll);
+        // Should detect: test_123 finished (disappeared), test_456 started (new)
+        expect(events2.length).toBeGreaterThanOrEqual(2);
+        
+        // Test 3: ATP format with multiple tournaments
+        const thirdPoll = {
+          TournamentMatches: [
+            {
+              TournamentDisplayName: 'ATP Masters 1000',
+              TournamentId: 'tourn_001',
+              Matches: [{
+                MatchId: 'test_789',
+                PlayerTeam1: {
+                  PlayerFirstName: 'Dave',
+                  PlayerLastName: 'Brown'
+                },
+                PlayerTeam2: {
+                  PlayerFirstName: 'Steve',
+                  PlayerLastName: 'Davis'
+                },
+                ResultString: '20',
+                Status: 'P'
+              }]
+            },
+            {
+              TournamentDisplayName: 'ATP 250',
+              TournamentId: 'tourn_002',
+              Matches: [{
+                MatchId: 'test_999',
+                PlayerTeam1: {
+                  PlayerFirstName: 'Alex',
+                  PlayerLastName: 'Wilson'
+                },
+                PlayerTeam2: {
+                  PlayerFirstName: 'Chris',
+                  PlayerLastName: 'Taylor'
+                },
+                ResultString: '11',
+                Status: 'P'
+              }]
+            }
+          ]
+        };
+        
+        const events3 = eventGenerator.processData(endpoint, thirdPoll);
+        // Should detect: test_456 finished, test_789 and test_999 started
+        expect(events3.length).toBeGreaterThanOrEqual(3);
       });
 
       it('should handle missing or malformed data gracefully', () => {
@@ -611,40 +641,41 @@ describe('JSON Diff Event Generation System', () => {
         }).not.toThrow();
       });
 
-      it('should handle different match ID field names', () => {
+      it('should handle strict ATP match ID format', () => {
         const endpoint = '/api/live-matches';
         
         // Clear any previous state
         eventGenerator.clearStates();
         
-        // First poll with different ID field names (testing ID field detection)
-        const dataWithDifferentIds = {
+        // First poll with various valid ATP MatchId values (testing strict format handling)
+        const dataWithValidMatchIds = {
           TournamentMatches: [{
-            TournamentName: 'Test Tournament',
+            TournamentDisplayName: 'Test Tournament',
+            TournamentId: 'tourn_001',
             Matches: [
               { 
-                matchId: 'test_1', // lowercase variant
+                MatchId: 'MS001', // Standard singles match ID
                 PlayerTeam1: { PlayerFirstName: 'A', PlayerLastName: 'Player' },
                 PlayerTeam2: { PlayerFirstName: 'B', PlayerLastName: 'Player' },
                 ResultString: '00',
                 Status: 'P'
               },
               { 
-                MatchId: 'test_2', // standard ATP format
+                MatchId: 'MD002', // Doubles match ID
                 PlayerTeam1: { PlayerFirstName: 'C', PlayerLastName: 'Player' },
                 PlayerTeam2: { PlayerFirstName: 'D', PlayerLastName: 'Player' },
                 ResultString: '00',
                 Status: 'P'
               },
               { 
-                id: 'test_3', // generic id
+                MatchId: 'QS003', // Qualifying singles
                 PlayerTeam1: { PlayerFirstName: 'E', PlayerLastName: 'Player' },
                 PlayerTeam2: { PlayerFirstName: 'F', PlayerLastName: 'Player' },
                 ResultString: '00',
                 Status: 'P'
               },
               { 
-                match_id: 'test_4', // underscore variant
+                MatchId: 'test_numeric_123', // Numeric suffix
                 PlayerTeam1: { PlayerFirstName: 'G', PlayerLastName: 'Player' },
                 PlayerTeam2: { PlayerFirstName: 'H', PlayerLastName: 'Player' },
                 ResultString: '00',
@@ -654,17 +685,21 @@ describe('JSON Diff Event Generation System', () => {
           }]
         };
         
-        const events1 = eventGenerator.processData(endpoint, dataWithDifferentIds);
+        const events1 = eventGenerator.processData(endpoint, dataWithValidMatchIds);
         expect(events1).toHaveLength(0); // First poll, no events
         
-        // Second poll - remove all matches to test ID extraction worked
+        // Second poll - remove all matches to test ID extraction worked correctly
         const events2 = eventGenerator.processData(endpoint, { TournamentMatches: [{ Matches: [] }] });
         
         expect(events2).toHaveLength(4); // Should detect all 4 matches finished
         events2.forEach(event => {
           expect(event.event_type).toBe(EVENT_TYPES.MATCH_FINISHED);
-          expect(event.match_id).toMatch(/test_[1-4]/);
+          expect(event.match_id).toMatch(/^(MS001|MD002|QS003|test_numeric_123)$/);
         });
+        
+        // Verify the match IDs are preserved correctly
+        const matchIds = events2.map(e => e.match_id).sort();
+        expect(matchIds).toEqual(['MD002', 'MS001', 'QS003', 'test_numeric_123']);
       });
     });
 

@@ -790,29 +790,28 @@ class EventGeneratorService {
     
     // Handle nested ATP API structure: TournamentMatches[0].Matches[n]
     if (data.TournamentMatches && Array.isArray(data.TournamentMatches)) {
-      // Check if this is the nested structure with Matches arrays inside each tournament
       const allMatches = [];
       for (const tournament of data.TournamentMatches) {
         if (tournament.Matches && Array.isArray(tournament.Matches)) {
-          // This is the nested structure - extract matches from each tournament
-          allMatches.push(...tournament.Matches);
-        } else if (this.extractMatchId(tournament)) {
+          // This is the nested structure - extract matches and preserve tournament context
+          const matchesWithTournamentInfo = tournament.Matches.map(match => ({
+            ...match,
+            // Preserve tournament information from parent context
+            _tournamentName: tournament.TournamentDisplayName,
+            _tournamentId: tournament.TournamentId,
+            _tournamentType: tournament.TournamentType,
+            _tournamentLevel: tournament.TournamentLevel,
+            _tournamentYear: tournament.TournamentYear
+          }));
+          allMatches.push(...matchesWithTournamentInfo);
+        } else if (tournament.MatchId) {
           // This is the flat structure - tournament objects are actually matches
-          // Use extractMatchId to handle different ID field names (MatchId, matchId, etc.)
           allMatches.push(tournament);
         }
       }
       return allMatches;
     }
     
-    if (data.matches && Array.isArray(data.matches)) {
-      return data.matches;
-    }
-    
-    if (data.data && Array.isArray(data.data)) {
-      return data.data;
-    }
-
     console.warn('[EVENTS] Unable to extract matches from data structure:', Object.keys(data));
     return [];
   }
@@ -834,12 +833,7 @@ class EventGeneratorService {
     if (!match) return null;
     
     // ATP API format: MatchId field
-    return match.MatchId || 
-           match.matchId || 
-           match.id || 
-           match.Id ||
-           match.match_id ||
-           null;
+    return match.MatchId || null;
   }
 
   extractPlayerNames(match) {
@@ -852,20 +846,7 @@ class EventGeneratorService {
       return [player1Name, player2Name];
     }
     
-    // Legacy/test format: players array with name property
-    if (match.players && Array.isArray(match.players)) {
-      return match.players.map(p => p.name || p.lastName || p.displayName || 'Unknown');
-    }
-    
-    // Alternative format: player1/player2 objects
-    if (match.player1 && match.player2) {
-      return [
-        match.player1.name || match.player1.lastName || 'Player 1',
-        match.player2.name || match.player2.lastName || 'Player 2'
-      ];
-    }
-    
-    return ['Player A', 'Player B'];
+    return ['Unknown Player 1', 'Unknown Player 2'];
   }
 
   formatPlayerName(playerTeam) {
@@ -888,43 +869,28 @@ class EventGeneratorService {
     if (!match) return '0-0';
     
     // ATP API format: ResultString for formatted match score
-    return match.ResultString ||
-           match.score || 
-           match.currentScore || 
-           match.liveScore || 
-           '0-0';
+    return match.ResultString || '0-0';
   }
 
   extractTournamentName(match) {
     if (!match) return 'Unknown Tournament';
     
-    // For ATP API, tournament info might be in parent data structure
-    // For now, check common field names
-    return match.TournamentName ||
-           match.tournament || 
-           match.tournamentName || 
-           match.tournamentTitle ||
-           'Unknown Tournament';
+    // Use preserved tournament information from parent TournamentMatches context
+    return match._tournamentName || 'Unknown Tournament';
   }
 
   extractRound(match) {
-    if (!match) return 'Unknown Round';
+    if (!match) return { ShortName: 'Unknown', LongName: 'Unknown Round' };
     
-    // ATP API format: Round field
-    return match.Round ||
-           match.round || 
-           match.roundName || 
-           match.roundDescription ||
-           'Unknown Round';
+    // ATP API format: Round field (object with ShortName/LongName)
+    return match.Round || { ShortName: 'Unknown', LongName: 'Unknown Round' };
   }
 
   extractStatus(match) {
     if (!match) return 'Unknown';
     
     // ATP API format: Status field (P=in progress, F=finished, etc.)
-    return match.Status ||
-           match.status ||
-           'Unknown';
+    return match.Status || 'Unknown';
   }
 
   deduplicateEvents(events) {
@@ -953,11 +919,7 @@ class EventGeneratorService {
     if (!match) return 'Unknown Court';
     
     // ATP API format: CourtName field
-    return match.CourtName ||
-           match.court || 
-           match.courtName || 
-           match.venue ||
-           'Unknown Court';
+    return match.CourtName || 'Unknown Court';
   }
 
   setEnabled(enabled) {
