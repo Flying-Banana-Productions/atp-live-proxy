@@ -37,24 +37,26 @@ class LogReplay {
 
     // If no date specified, find the most recent date
     let targetDate = date;
+    let files = [];
     if (!targetDate) {
-      targetDate = this.findLatestDate(endpointDir);
+      files = this.recursiveReadDirSync(endpointDir);
       if (this.verbose) {
         console.log(`No date specified, using latest: ${targetDate}`);
       }
     }
-
-    // Build date directory path
-    const dateDir = path.join(endpointDir, targetDate);
-    if (!fs.existsSync(dateDir)) {
-      throw new Error(`Date directory not found: ${dateDir}`);
+    else {
+      // Build date directory path
+      const dateDir = path.join(endpointDir, targetDate);
+      if (!fs.existsSync(dateDir)) {
+        throw new Error(`Date directory not found: ${dateDir}`);
+      }
+      files = fs.readdirSync(dateDir).map(file => path.join(dateDir, file));
     }
 
-    // Get all JSON files in the date directory
-    const files = fs.readdirSync(dateDir)
-      .filter(file => file.endsWith('_response.json'))
+    // Get all JSON files
+    files.filter(file => file.endsWith('_response.json'))
       .map(file => ({
-        path: path.join(dateDir, file),
+        path: file, 
         timestamp: this.extractTimestamp(file)
       }))
       .filter(file => file.timestamp) // Only include files with valid timestamps
@@ -71,6 +73,29 @@ class LogReplay {
 
     return files;
   }
+
+  /**
+   * Recursively reads a directory and its subdirectories, returning a list of all file paths.
+   * @param {string} dirPath The path to the directory to start reading from.
+   * @returns {string[]} An array of absolute file paths.
+   */
+  recursiveReadDirSync(dirPath) {
+    let fileList = [];
+    const files = fs.readdirSync(dirPath, { withFileTypes: true });
+
+    for (const file of files) {
+      const fullPath = path.join(dirPath, file.name);
+      if (file.isDirectory()) {
+        // If it's a directory, recursively call the function and concatenate the results
+        fileList = fileList.concat(this.recursiveReadDirSync(fullPath));
+      } else {
+        // If it's a file, add its path to the list
+        fileList.push(fullPath);
+      }
+    }
+    return fileList;
+  }
+
 
   /**
    * Find the latest date directory in the endpoint folder

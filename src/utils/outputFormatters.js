@@ -80,7 +80,12 @@ function formatTable(results, colorsEnabled = true) {
   const output = [];
   
   // Header
-  const dateStr = replayInfo.startTime ? new Date(replayInfo.startTime).toISOString().split('T')[0] : 'Unknown';
+  let dateStr = 'Unknown';
+  if (replayInfo.startTime && replayInfo.endTime) {
+    const startDate = new Date(replayInfo.startTime).toISOString().split('T')[0];
+    const endDate = new Date(replayInfo.endTime).toISOString().split('T')[0];
+    dateStr = startDate === endDate ? startDate : `${startDate} to ${endDate}`;
+  }
   const header = `Event Replay Results - ${dateStr} (${replayInfo.filesProcessed} log files processed)`;
   output.push(colorize(header, colors.bright + colors.cyan, colorsEnabled));
   output.push(colorize('='.repeat(header.length), colors.dim, colorsEnabled));
@@ -96,14 +101,18 @@ function formatTable(results, colorsEnabled = true) {
   }
 
   // Table header
-  const tableHeader = 'Time     | Event Type      | Match ID | Description';
-  const tableSeparator = '---------|-----------------|----------|---------------------------';
+  const tableHeader = 'Date       | Time     | Event Type      | Match ID | Description';
+  const tableSeparator = '-----------|----------|-----------------|----------|---------------------------';
   
   output.push(colorize(tableHeader, colors.bright, colorsEnabled));
   output.push(colorize(tableSeparator, colors.dim, colorsEnabled));
 
   // Table rows
   events.forEach(event => {
+    const date = event.logTimestamp ? 
+      new Date(event.logTimestamp).toISOString().split('T')[0] : 
+      'Unknown   ';
+    
     const time = event.logTimestamp ? 
       new Date(event.logTimestamp).toTimeString().substring(0, 8) : 
       'Unknown';
@@ -119,7 +128,7 @@ function formatTable(results, colorsEnabled = true) {
       colorsEnabled
     );
 
-    const row = `${time} | ${coloredEventType} | ${matchId} | ${description}`;
+    const row = `${date} | ${time} | ${coloredEventType} | ${matchId} | ${description}`;
     output.push(row);
   });
 
@@ -184,7 +193,12 @@ function formatSummary(results, colorsEnabled = true) {
   const output = [];
   
   // Header
-  const dateStr = replayInfo.startTime ? new Date(replayInfo.startTime).toISOString().split('T')[0] : 'Unknown';
+  let dateStr = 'Unknown';
+  if (replayInfo.startTime && replayInfo.endTime) {
+    const startDate = new Date(replayInfo.startTime).toISOString().split('T')[0];
+    const endDate = new Date(replayInfo.endTime).toISOString().split('T')[0];
+    dateStr = startDate === endDate ? startDate : `${startDate} to ${endDate}`;
+  }
   const header = `Event Replay Summary for ${dateStr}`;
   output.push(colorize(header, colors.bright + colors.cyan, colorsEnabled));
   output.push(colorize('='.repeat(header.length), colors.dim, colorsEnabled));
