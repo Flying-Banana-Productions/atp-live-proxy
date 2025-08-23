@@ -16,11 +16,11 @@ class AtpApiService {
     // Add request interceptor for logging
     this.client.interceptors.request.use(
       (config) => {
-        console.log(`[ATPAPI] Making request to: ${config.method?.toUpperCase()} ${config.url}`);
+        console.log(`[ATP API] Making request to: ${config.method?.toUpperCase()} ${config.url}`);
         return config;
       },
       (error) => {
-        console.error('[ATPAPI] Request error:', error);
+        console.error('[ATP API] Request error:', error);
         return Promise.reject(error);
       }
     );
@@ -32,7 +32,7 @@ class AtpApiService {
       },
       (error) => {
         if(error.response?.status != 404) {
-          console.error('[ATPAPI] API Error:', {
+          console.error('[ATP API] API Error:', {
             status: error.response?.status,
             statusText: error.response?.statusText,
             url: error.config?.url,
