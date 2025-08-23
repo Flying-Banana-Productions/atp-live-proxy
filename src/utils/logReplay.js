@@ -39,6 +39,7 @@ class LogReplay {
     let targetDate = date;
     let files = [];
     if (!targetDate) {
+      targetDate = this.findLatestDate(endpointDir);
       files = this.recursiveReadDirSync(endpointDir);
       if (this.verbose) {
         console.log(`No date specified, using latest: ${targetDate}`);
@@ -53,19 +54,39 @@ class LogReplay {
       files = fs.readdirSync(dateDir).map(file => path.join(dateDir, file));
     }
 
-    // Get all JSON files
-    files.filter(file => file.endsWith('_response.json'))
+    // Get all JSON files and apply filtering
+    files = files.filter(file => file.endsWith('_response.json'))
       .map(file => ({
         path: file, 
-        timestamp: this.extractTimestamp(file)
+        timestamp: this.extractTimestamp(file),
+        fullDatetime: this.extractFullDatetime(file)
       }))
       .filter(file => file.timestamp) // Only include files with valid timestamps
       .filter(file => this.matchesTimeFilter(file.timestamp, startTime, endTime))
-      .sort((a, b) => a.timestamp.localeCompare(b.timestamp)) // Sort chronologically
+      .sort((a, b) => a.fullDatetime.localeCompare(b.fullDatetime)) // Sort by full datetime
       .map(file => file.path);
 
     if (this.verbose) {
-      console.log(`Found ${files.length} matching log files for ${targetDate}`);
+      // Determine actual date range from processed files
+      let dateRangeStr = targetDate;
+      if (!date && files.length > 0) {
+        // Extract dates from file paths to show actual range
+        const dates = files.map(file => {
+          const pathParts = file.split(path.sep);
+          return pathParts[pathParts.length - 2];
+        }).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d));
+        
+        if (dates.length > 0) {
+          const uniqueDates = [...new Set(dates)].sort();
+          if (uniqueDates.length === 1) {
+            dateRangeStr = uniqueDates[0];
+          } else {
+            dateRangeStr = `${uniqueDates[0]} to ${uniqueDates[uniqueDates.length - 1]}`;
+          }
+        }
+      }
+      
+      console.log(`Found ${files.length} matching log files for ${dateRangeStr}`);
       if (startTime || endTime) {
         console.log(`Time filter: ${startTime || 'start'} - ${endTime || 'end'}`);
       }
@@ -137,6 +158,32 @@ class LogReplay {
   }
 
   /**
+   * Extract full datetime from log file path including date directory
+   * Expected path format: .../YYYY-MM-DD/HH-MM-SS-mmm_response.json
+   * @param {string} filePath - Full path to log file
+   * @returns {string|null} ISO datetime string for sorting, or null if invalid
+   */
+  extractFullDatetime(filePath) {
+    // Extract date from path (second-to-last path component)
+    const pathParts = filePath.split(path.sep);
+    const dateMatch = pathParts[pathParts.length - 2]?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    
+    if (!dateMatch) {
+      return null;
+    }
+    
+    // Extract time from filename
+    const timeStr = this.extractTimestamp(filePath);
+    if (!timeStr) {
+      return null;
+    }
+    
+    const [year, month, day] = dateMatch.slice(1);
+    // Convert HH:MM:SS to ISO datetime string for proper sorting
+    return `${year}-${month}-${day}T${timeStr}`;
+  }
+
+  /**
    * Check if a timestamp matches the time filter criteria
    * @param {string} timestamp - Timestamp in HH:MM:SS format
    * @param {string} startTime - Start time filter in HH:MM format (optional)
@@ -183,6 +230,11 @@ class LogReplay {
    * @returns {Object} Replay results with events and metadata
    */
   async replayLogs(logFiles) {
+    // Disable EventOutputService to prevent automatic webhook delivery during replay
+    // The replay script handles its own event output with proper timing control
+    const eventOutput = require('../services/eventOutput');
+    eventOutput.setEnabled(false);
+
     const results = {
       replayInfo: {
         startTime: null,

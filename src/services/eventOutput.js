@@ -1,5 +1,6 @@
 const { validateEvent } = require('../types/events');
 const config = require('../config');
+const webhookClient = require('./webhookClient');
 
 /**
  * Event output service for handling generated events
@@ -13,6 +14,12 @@ class EventOutputService {
     // Add console output handler if enabled
     if (config.events.consoleOutput) {
       this.outputHandlers.push(this.consoleOutput.bind(this));
+    }
+
+    // Add webhook output handler if enabled
+    if (config.events.webhookUrl && config.events.webhookSecret) {
+      this.outputHandlers.push(this.webhookOutput.bind(this));
+      console.log('[EVENTS] Webhook output handler enabled');
     }
   }
 
@@ -72,6 +79,19 @@ class EventOutputService {
   }
 
   /**
+   * Webhook output handler - sends events to configured webhook endpoint
+   * @param {Array} events - Array of valid events
+   */
+  webhookOutput(events) {
+    try {
+      // Queue events for batched sending via webhook client
+      webhookClient.queueEvents(events);
+    } catch (error) {
+      console.error('[EVENTS] Error sending events to webhook:', error.message);
+    }
+  }
+
+  /**
    * Add a new output handler
    * @param {Function} handler - Function that takes array of events
    */
@@ -96,7 +116,8 @@ class EventOutputService {
   getConfig() {
     return {
       enabled: this.isEnabled,
-      handlers: this.outputHandlers.length
+      handlers: this.outputHandlers.length,
+      webhookConfig: webhookClient.getConfig()
     };
   }
 }

@@ -56,9 +56,13 @@ const config = {
     enabled: process.env.EVENTS_ENABLED !== 'false', // Default to enabled, set to 'false' to disable
     endpoints: (process.env.EVENTS_ENDPOINTS || '/api/live-matches,/api/draws/live').split(','),
     consoleOutput: process.env.EVENTS_CONSOLE_OUTPUT !== 'false', // Default to enabled
-    // Future webhook configuration
+    // Webhook configuration
     webhookUrl: process.env.EVENTS_WEBHOOK_URL,
     webhookSecret: process.env.EVENTS_WEBHOOK_SECRET,
+    webhookTimeout: parseInt(process.env.EVENTS_WEBHOOK_TIMEOUT) || 5000, // 5 seconds
+    webhookRetries: parseInt(process.env.EVENTS_WEBHOOK_RETRIES) || 3,
+    webhookBatchSize: parseInt(process.env.EVENTS_WEBHOOK_BATCH_SIZE) || 10,
+    webhookBatchInterval: parseInt(process.env.EVENTS_WEBHOOK_BATCH_INTERVAL) || 2000, // 2 seconds
   },
   apiLogging: {
     enabled: process.env.ENABLE_API_LOGGING === 'true', // Disabled by default for security
