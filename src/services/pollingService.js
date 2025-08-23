@@ -184,17 +184,16 @@ class PollingService {
     }
 
     const previousMultiplier = backoffState.currentMultiplier;
-    const newMultiplier = backoffState.currentMultiplier * config.polling.backoff.multiplier;
+    backoffState.currentMultiplier = Math.min(config.polling.backoff.maxMultiplier, backoffState.currentMultiplier * config.polling.backoff.multiplier);
     backoffState.consecutiveErrors++;
     backoffState.isBackedOff = true;
 
-    // Stop logging changes to the polling backoff if we've hit the limit
-    if(newMultiplier <= config.polling.backoff.maxMultiplier) {
-      backoffState.currentMultiplier = newMultiplier;
-      const baseTtlSeconds = backoffState.baseInterval / 1000;
+    // Stop logging changes to the polling backoff after we've hit the limit
+    if(previousMultiplier < config.polling.backoff.maxMultiplier) {
+      const previousIntervalSeconds = Math.round((previousMultiplier * backoffState.baseInterval) / 1000);
       const newIntervalSeconds = Math.round((backoffState.baseInterval * backoffState.currentMultiplier) / 1000);
 
-      console.log(`[POLLING BACKOFF] ${endpoint}: Backing off from ${baseTtlSeconds * previousMultiplier}s to ${newIntervalSeconds}s (${backoffState.consecutiveErrors} consecutive 404s)`);
+      console.log(`[POLLING BACKOFF] ${endpoint}: Backing off from ${previousIntervalSeconds}s to ${newIntervalSeconds}s (${backoffState.consecutiveErrors} consecutive 404s)`);
     }
   }
 
