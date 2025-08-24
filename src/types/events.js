@@ -3,6 +3,7 @@
  */
 const EVENT_TYPES = {
   MATCH_STARTED: 'match_started',
+  MATCH_PLAY_BEGAN: 'match_play_began',
   MATCH_FINISHED: 'match_finished',
   SCORE_UPDATED: 'score_updated',
   SET_COMPLETED: 'set_completed',

@@ -165,13 +165,13 @@ class EventGeneratorService {
     for (const [matchId, match] of currentMatchMap) {
       if (!previousMatchMap.has(matchId)) {
         console.log(`[EVENTS] New match detected: ${matchId}`);
-        // Only create started event if match is not finished
+        // Only create started event if match is not finished AND not already in progress
         const matchStatus = this.extractStatus(match);
-        if (matchStatus !== 'F') {
+        if (matchStatus !== 'F' && matchStatus !== 'P') {
           const startedEvent = this.createMatchStartedEvent(match);
           if (startedEvent) events.push(startedEvent);
         } else {
-          console.log(`[EVENTS] Skipping match started event for new match ${matchId} - already finished (status: ${matchStatus})`);
+          console.log(`[EVENTS] Skipping match started event for new match ${matchId} - status: ${matchStatus}`);
         }
       }
     }
@@ -614,7 +614,7 @@ class EventGeneratorService {
       case 'C->W':
         return { type: EVENT_TYPES.WARMUP_STARTED, priority: EVENT_PRIORITY.LOW };
       case 'W->P':
-        return { type: EVENT_TYPES.MATCH_STARTED, priority: EVENT_PRIORITY.HIGH };
+        return { type: EVENT_TYPES.MATCH_PLAY_BEGAN, priority: EVENT_PRIORITY.HIGH };
       }
     }
 
@@ -839,7 +839,7 @@ class EventGeneratorService {
   extractPlayerNames(match) {
     if (!match) return ['Unknown', 'Unknown'];
     
-    // ATP API format: PlayerTeam1/PlayerTeam2 with PlayerFirstName/PlayerLastName
+    // ATP API format: PlayerTeam1/PlayerTeam2 with PlayerFirstNameFull/PlayerLastName
     if (match.PlayerTeam1 && match.PlayerTeam2) {
       const player1Name = this.formatPlayerName(match.PlayerTeam1);
       const player2Name = this.formatPlayerName(match.PlayerTeam2);
@@ -849,13 +849,20 @@ class EventGeneratorService {
     return ['Unknown Player 1', 'Unknown Player 2'];
   }
 
+  extractUmpireName(match) {
+    if(!match) return 'Unknown Umpire';
+    const firstName = match.UmpireFirstName || '';
+    const lastName = match.UmpireLastName || '';
+    return `${firstName} ${lastName}`.trim() || 'Unknown';
+  }
+
   formatPlayerName(playerTeam) {
     if (!playerTeam) return 'Unknown';
     
-    const firstName = playerTeam.PlayerFirstName || '';
+    const firstName = playerTeam.PlayerFirstNameFull || playerTeam.PlayerFirstName || '';
     const lastName = playerTeam.PlayerLastName || '';
     
-    // Handle doubles - if there's a partner, show both players
+    // Handle doubles - if there's a partner, show both players. Use first initial only for space (PlayerFirstName)
     if (playerTeam.PartnerFirstName && playerTeam.PartnerLastName) {
       const partnerName = `${playerTeam.PartnerFirstName} ${playerTeam.PartnerLastName}`.trim();
       const mainPlayerName = `${firstName} ${lastName}`.trim();
