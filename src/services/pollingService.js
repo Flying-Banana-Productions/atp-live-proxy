@@ -184,7 +184,7 @@ class PollingService {
     }
 
     const previousMultiplier = backoffState.currentMultiplier;
-    backoffState.currentMultiplier = Math.min(config.polling.backoff.maxMultiplier, backoffState.currentMultiplier * config.polling.backoff.multiplier);
+    backoffState.currentMultiplier = Math.min(config.polling.backoff.maxMultiplier, previousMultiplier * config.polling.backoff.multiplier);
     backoffState.consecutiveErrors++;
     backoffState.isBackedOff = true;
 

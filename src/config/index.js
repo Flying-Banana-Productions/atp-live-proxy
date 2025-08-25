@@ -20,11 +20,11 @@ const config = {
       '/api/match-stats': 10,
       '/api/h2h/match': 10,
       '/api/h2h': 10, // H2H by player IDs
-      '/api/draws/live': 60, // 1 minute
       
       // Results - medium cache time
       '/api/results': 180, // 3 minutes
       '/api/draws': 180, // 3 minutes
+      '/api/draws/live': 300, // 5 minutes
       
       // Static data - long cache times
       '/api/player-list': 600, // 10 minutes
