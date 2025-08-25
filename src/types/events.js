@@ -44,10 +44,11 @@ const EVENT_PRIORITY = {
  * @param {Object} options - Additional options (priority, metadata)
  * @returns {Object} Standardized event object
  */
-function createEvent(eventType, matchId, description, data = {}, options = {}) {
+function createEvent(eventType, tournamentId, matchId, description, data = {}, options = {}) {
   return {
     event_type: eventType,
     timestamp: new Date().toISOString(),
+    tournament_id: tournamentId.toString(),
     match_id: matchId,
     description,
     data: {

@@ -430,12 +430,14 @@ class EventGeneratorService {
    * @returns {Object} Match started event
    */
   createMatchStartedEvent(match) {
+    const tournamentId = this.extractTournamentId(match);
     const matchId = this.extractMatchId(match);
     const players = this.extractPlayerNames(match);
     const description = `Match started: ${players.join(' vs ')}`;
     
     return createEvent(
       EVENT_TYPES.MATCH_STARTED,
+      tournamentId,
       matchId,
       description,
       {
@@ -456,6 +458,7 @@ class EventGeneratorService {
    * @returns {Object} Match finished event
    */
   createMatchFinishedEvent(match, oldMatchData = null) {
+    const tournamentId = this.extractTournamentId(match);
     const matchId = this.extractMatchId(match);
     const players = this.extractPlayerNames(match);
     const finalScore = this.extractScore(oldMatchData || match);
@@ -463,6 +466,7 @@ class EventGeneratorService {
     
     return createEvent(
       EVENT_TYPES.MATCH_FINISHED,
+      tournamentId,
       matchId,
       description,
       {
@@ -484,11 +488,13 @@ class EventGeneratorService {
    * @returns {Object} Score update event
    */
   createScoreUpdateEvent(match, matchId, oldScore, newScore) {
+    const tournamentId = this.extractTournamentId(match);
     const players = this.extractPlayerNames(match);
     const description = `Score update: ${players.join(' vs ')} - ${newScore}`;
     
     return createEvent(
       EVENT_TYPES.SCORE_UPDATED,
+      tournamentId,
       matchId,
       description,
       {
@@ -505,17 +511,19 @@ class EventGeneratorService {
   /**
    * Create set completed event
    * @param {Object} match - Match object
-   * @param {string} matchId - Match ID
+   * @param match started{string} matchId - Match ID
    * @param {string} oldScore - Previous score
    * @param {string} newScore - New score
    * @returns {Object} Set completed event
    */
   createSetCompletedEvent(match, matchId, oldScore, newScore) {
+    const tournamentId = this.extractTournamentId(match);
     const players = this.extractPlayerNames(match);
     const description = `Set completed: ${players.join(' vs ')} - ${newScore}`;
     
     return createEvent(
       EVENT_TYPES.SET_COMPLETED,
+      tournamentId,
       matchId,
       description,
       {
@@ -538,11 +546,13 @@ class EventGeneratorService {
    * @returns {Object} Game won event
    */
   createGameWonEvent(match, matchId, oldScore, newScore) {
+    const tournamentId = this.extractTournamentId(match);
     const players = this.extractPlayerNames(match);
     const description = `Game completed: ${players.join(' vs ')} - ${newScore}`;
     
     return createEvent(
       EVENT_TYPES.GAME_WON,
+      tournamentId,
       matchId,
       description,
       {
@@ -565,11 +575,13 @@ class EventGeneratorService {
    * @returns {Object} Court change event
    */
   createCourtChangeEvent(match, matchId, oldCourt, newCourt) {
+    const tournamentId = this.extractTournamentId(match);
     const players = this.extractPlayerNames(match);
     const description = `Court changed: ${players.join(' vs ')} moved from ${oldCourt} to ${newCourt}`;
     
     return createEvent(
       EVENT_TYPES.COURT_CHANGED,
+      tournamentId,
       matchId,
       description,
       {
@@ -636,6 +648,7 @@ class EventGeneratorService {
    * @returns {Object} Status change event
    */
   createStatusChangeEvent(match, matchId, oldStatus, newStatus) {
+    const tournamentId = this.extractTournamentId(match);
     const players = this.extractPlayerNames(match);
     const statusInfo = this.getAtpStatusEventInfo(newStatus, oldStatus);
     
@@ -682,6 +695,7 @@ class EventGeneratorService {
     
     return createEvent(
       statusInfo.type,
+      tournamentId,
       matchId,
       description,
       {
@@ -702,11 +716,13 @@ class EventGeneratorService {
    * @returns {Object} Tiebreak started event
    */
   createTiebreakStartedEvent(match, matchId) {
+    const tournamentId = this.extractTournamentId(match);
     const players = this.extractPlayerNames(match);
     const description = `Tiebreak started: ${players.join(' vs ')}`;
     
     return createEvent(
       EVENT_TYPES.TIEBREAK_STARTED,
+      tournamentId,
       matchId,
       description,
       {
@@ -834,6 +850,11 @@ class EventGeneratorService {
     
     // ATP API format: MatchId field
     return match.MatchId || null;
+  }
+
+  extractTournamentId(match) {
+    if(!match) return null;
+    return match._tournamentId || null;
   }
 
   extractPlayerNames(match) {
