@@ -69,12 +69,72 @@ function colorize(text, color, enabled = true) {
 }
 
 /**
+ * Group events by match ID and sort by first event timestamp
+ * @param {Array} events - Array of events
+ * @returns {Array} Array of event groups, each containing events for one match
+ */
+function groupEventsByMatch(events) {
+  const matchGroups = {};
+  
+  // Group events by match_id
+  events.forEach(event => {
+    const matchId = event.match_id || 'N/A';
+    if (!matchGroups[matchId]) {
+      matchGroups[matchId] = [];
+    }
+    matchGroups[matchId].push(event);
+  });
+  
+  // Convert to array and sort each group by timestamp, then sort groups by first event timestamp
+  const sortedGroups = Object.values(matchGroups)
+    .map(group => group.sort((a, b) => {
+      const timeA = a.logTimestamp ? new Date(a.logTimestamp).getTime() : 0;
+      const timeB = b.logTimestamp ? new Date(b.logTimestamp).getTime() : 0;
+      return timeA - timeB;
+    }))
+    .sort((groupA, groupB) => {
+      const timeA = groupA[0]?.logTimestamp ? new Date(groupA[0].logTimestamp).getTime() : 0;
+      const timeB = groupB[0]?.logTimestamp ? new Date(groupB[0].logTimestamp).getTime() : 0;
+      return timeA - timeB;
+    });
+    
+  return sortedGroups;
+}
+
+/**
+ * Extract player names from match events
+ * @param {Array} matchEvents - Array of events for a single match
+ * @returns {Array} Array of player names
+ */
+function extractPlayersFromEvents(matchEvents) {
+  // Look for player names in event data
+  for (const event of matchEvents) {
+    if (event.data && event.data.players && Array.isArray(event.data.players)) {
+      return event.data.players;
+    }
+  }
+  
+  // Fallback: try to extract from description
+  const descriptions = matchEvents.map(e => e.description).filter(Boolean);
+  for (const desc of descriptions) {
+    // Look for pattern "Player1 vs Player2" in descriptions
+    const vsMatch = desc.match(/^[^:]+:\s*(.+?)\s+vs\s+(.+?)\s+[-\(\d]/);
+    if (vsMatch) {
+      return [vsMatch[1], vsMatch[2]];
+    }
+  }
+  
+  return [];
+}
+
+/**
  * Format results as a readable table
  * @param {Object} results - Replay results object
  * @param {boolean} colorsEnabled - Whether to use colors
+ * @param {boolean} groupByMatch - Whether to group events by match ID
  * @returns {string} Formatted table output
  */
-function formatTable(results, colorsEnabled = true) {
+function formatTable(results, colorsEnabled = true, groupByMatch = false) {
   const { replayInfo, events, errors } = results;
   
   const output = [];
@@ -100,37 +160,98 @@ function formatTable(results, colorsEnabled = true) {
     return output.join('\n');
   }
 
-  // Table header
-  const tableHeader = 'Date       | Time     | Event Type       | Match ID | Description';
-  const tableSeparator = '-----------|----------|------------------|----------|---------------------------';
-  
-  output.push(colorize(tableHeader, colors.bright, colorsEnabled));
-  output.push(colorize(tableSeparator, colors.dim, colorsEnabled));
-
-  // Table rows
-  events.forEach(event => {
-    const date = event.logTimestamp ? 
-      new Date(event.logTimestamp).toISOString().split('T')[0] : 
-      'Unknown   ';
+  if (groupByMatch) {
+    // Group events by match ID and display each match separately
+    const matchGroups = groupEventsByMatch(events);
     
-    const time = event.logTimestamp ? 
-      new Date(event.logTimestamp).toTimeString().substring(0, 8) : 
-      'Unknown';
+    matchGroups.forEach((matchEvents, index) => {
+      if (index > 0) {
+        output.push(''); // Add spacing between matches
+      }
+      
+      // Match header
+      const matchId = matchEvents[0].match_id || 'N/A';
+      const players = extractPlayersFromEvents(matchEvents);
+      const matchHeader = players.length > 0 ? 
+        `Match: ${players.join(' vs ')} (${matchId})` :
+        `Match ID: ${matchId}`;
+      
+      output.push(colorize(matchHeader, colors.bright + colors.cyan, colorsEnabled));
+      output.push(colorize('─'.repeat(matchHeader.length), colors.dim, colorsEnabled));
+      
+      // Table header for this match
+      const tableHeader = 'Date       | Time     | Event Type       | Description';
+      const tableSeparator = '-----------|----------|------------------|---------------------------';
+      
+      output.push(colorize(tableHeader, colors.bright, colorsEnabled));
+      output.push(colorize(tableSeparator, colors.dim, colorsEnabled));
+      
+      // Events for this match
+      matchEvents.forEach(event => {
+        const date = event.logTimestamp ? 
+          new Date(event.logTimestamp).toISOString().split('T')[0] : 
+          'Unknown   ';
+        
+        const time = event.logTimestamp ? 
+          new Date(event.logTimestamp).toTimeString().substring(0, 8) : 
+          'Unknown';
+        
+        const eventType = event.event_type.padEnd(16);
+        const description = event.description || 'No description';
+
+        // Apply color to event type
+        const coloredEventType = colorize(
+          eventType, 
+          eventTypeColors[event.event_type] || colors.white, 
+          colorsEnabled
+        );
+
+        const row = `${date} | ${time} | ${coloredEventType} | ${description}`;
+        output.push(row);
+      });
+      
+      // Match summary
+      output.push('');
+      const matchEventStats = getEventTypeStats(matchEvents);
+      const matchStatsText = Object.entries(matchEventStats)
+        .map(([type, count]) => `${count} ${type}`)
+        .join(', ');
+      const matchSummary = `Match Events: ${matchEvents.length} (${matchStatsText})`;
+      output.push(colorize(matchSummary, colors.green, colorsEnabled));
+    });
+  } else {
+    // Original table format - all events in one table
+    const tableHeader = 'Date       | Time     | Event Type       | Match ID | Description';
+    const tableSeparator = '-----------|----------|------------------|----------|---------------------------';
     
-    const eventType = event.event_type.padEnd(16);
-    const matchId = (event.match_id || 'N/A').padEnd(8);
-    const description = event.description || 'No description';
+    output.push(colorize(tableHeader, colors.bright, colorsEnabled));
+    output.push(colorize(tableSeparator, colors.dim, colorsEnabled));
 
-    // Apply color to event type
-    const coloredEventType = colorize(
-      eventType, 
-      eventTypeColors[event.event_type] || colors.white, 
-      colorsEnabled
-    );
+    // Table rows
+    events.forEach(event => {
+      const date = event.logTimestamp ? 
+        new Date(event.logTimestamp).toISOString().split('T')[0] : 
+        'Unknown   ';
+      
+      const time = event.logTimestamp ? 
+        new Date(event.logTimestamp).toTimeString().substring(0, 8) : 
+        'Unknown';
+      
+      const eventType = event.event_type.padEnd(16);
+      const matchId = (event.match_id || 'N/A').padEnd(8);
+      const description = event.description || 'No description';
 
-    const row = `${date} | ${time} | ${coloredEventType} | ${matchId} | ${description}`;
-    output.push(row);
-  });
+      // Apply color to event type
+      const coloredEventType = colorize(
+        eventType, 
+        eventTypeColors[event.event_type] || colors.white, 
+        colorsEnabled
+      );
+
+      const row = `${date} | ${time} | ${coloredEventType} | ${matchId} | ${description}`;
+      output.push(row);
+    });
+  }
 
   // Summary
   output.push('');

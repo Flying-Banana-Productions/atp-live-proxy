@@ -346,6 +346,7 @@ program
   .option('--start <HH:MM>', 'Start time filter')
   .option('--end <HH:MM>', 'End time filter')
   .option('-f, --format <type>', 'Output format: json, table, summary', 'table')
+  .option('--group-by-match', 'Group events by match ID when using table format')
   .option('-o, --output <file>', 'Save results to file (optional)')
   .option('--no-colors', 'Disable colored output')
   .option('-v, --verbose', 'Show detailed logging information')
@@ -508,7 +509,7 @@ async function main() {
         break;
       case 'table':
       default:
-        output = formatTable(results, options.colors);
+        output = formatTable(results, options.colors, options.groupByMatch);
         break;
     }
 
