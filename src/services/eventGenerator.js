@@ -10,6 +10,7 @@ const config = require('../config');
 class EventGeneratorService {
   constructor() {
     this.previousStates = new Map(); // Store previous data states by endpoint
+    this.finishedMatches = new Set(); // Track matches that have already sent finished events
     this.isEnabled = config.events.enabled;
     this.monitoredEndpoints = new Set(config.events.endpoints);
     if(this.isEnabled) {
@@ -180,8 +181,14 @@ class EventGeneratorService {
     for (const [matchId, match] of previousMatchMap) {
       if (!currentMatchMap.has(matchId)) {
         console.log(`[EVENTS] Match removed: ${matchId}`);
-        const finishedEvent = this.createMatchFinishedEvent(match);
-        if (finishedEvent) events.push(finishedEvent);
+        // Only send finished event if we haven't already sent one for this match
+        if (!this.finishedMatches.has(matchId)) {
+          const finishedEvent = this.createMatchFinishedEvent(match);
+          if (finishedEvent) {
+            events.push(finishedEvent);
+            this.finishedMatches.add(matchId);
+          }
+        }
       }
     }
 
@@ -352,7 +359,17 @@ class EventGeneratorService {
 
       // Status changes
       else if (fieldName === 'status') {
-        event = this.createStatusChangeEvent(match, matchId, oldValue, newValue);
+        // Special handling for 'F' (Finished) status
+        if (newValue === 'F' && !this.finishedMatches.has(matchId)) {
+          event = this.createMatchFinishedEvent(match);
+          if (event) {
+            this.finishedMatches.add(matchId);
+          }
+        } else if (newValue !== 'F') {
+          // For all other status changes, use the regular status change event
+          event = this.createStatusChangeEvent(match, matchId, oldValue, newValue);
+        }
+        // If status is 'F' and we've already sent finished event, skip
       }
 
       if (event) {
@@ -375,17 +392,55 @@ class EventGeneratorService {
       return false;
     }
     
-    // Detect set completion patterns: 6-4, 6-3, 6-2, 6-1, 6-0, 7-5, 7-6, 6-7, 5-7, etc.
+    // Parse scores into sets
+    const oldSets = oldScore.trim().split(/\s+/);
+    const newSets = newScore.trim().split(/\s+/);
+    
+    // A set was completed if:
+    // 1. The number of sets increased (e.g., "46 53" -> "46 63 00")
+    // 2. A new set started (indicated by "00" at the end of new score)
+    // 3. The last set score changed to a winning score (e.g., "45" -> "46 00")
+    
+    // Check if number of sets increased
+    if (newSets.length > oldSets.length) {
+      // Check if the new set is "00" (indicating previous set finished)
+      if (newSets[newSets.length - 1] === '00') {
+        return true;
+      }
+    }
+    
+    // Check for specific patterns where a set was just won
+    // Set winning scores: 6-0 to 6-4, 7-5, 7-6(tiebreak), or reverse
     const setWinPatterns = [
-      /\b6-[0-4]\b/, /\b[0-4]-6\b/,  // 6-0 to 6-4
-      /\b7-5\b/, /\b5-7\b/,           // 7-5
-      /\b7-6\b/, /\b6-7\b/            // 7-6 (tiebreak)
+      /^6[0-4]$/, /^[0-4]6$/,     // 6-0 to 6-4 (60-64 or 06-46)
+      /^75$/, /^57$/,              // 7-5
+      /^76$/, /^67$/               // 7-6 (simplified, tiebreak score)
     ];
     
-    const oldHasSetWin = setWinPatterns.some(pattern => pattern.test(oldScore));
-    const newHasSetWin = setWinPatterns.some(pattern => pattern.test(newScore));
+    // Check if the last complete set in new score is a winning pattern
+    // and it wasn't already complete in the old score
+    if (newSets.length >= 1) {
+      // Get the last non-current set (exclude "00" or game scores like "15")
+      for (let i = newSets.length - 1; i >= 0; i--) {
+        const newSet = newSets[i].replace('-', ''); // Remove hyphen if present
+        
+        // Skip current game scores (00, 15, 30, 40, etc.)
+        if (newSet.length <= 2 && !setWinPatterns.some(p => p.test(newSet))) {
+          continue;
+        }
+        
+        // Check if this set matches a winning pattern
+        if (setWinPatterns.some(pattern => pattern.test(newSet))) {
+          // Check if this same set was already complete in old score
+          const oldSet = oldSets[i] ? oldSets[i].replace('-', '') : '';
+          if (!setWinPatterns.some(pattern => pattern.test(oldSet))) {
+            return true;
+          }
+        }
+      }
+    }
     
-    return !oldHasSetWin && newHasSetWin;
+    return false;
   }
 
   /**
@@ -956,6 +1011,7 @@ class EventGeneratorService {
 
   clearStates() {
     this.previousStates.clear();
+    this.finishedMatches.clear();
   }
 
   getStats() {
