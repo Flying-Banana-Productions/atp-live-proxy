@@ -382,6 +382,27 @@ class EventGeneratorService {
 
 
   /**
+   * Determine which player won the most recently completed set
+   * @param {string} score - Current score
+   * @returns {number} 1 or 2 indicating winner position in players array
+   */
+  getSetWinner(score) {
+    const sets = score.trim().split(/\s+/);
+    
+    // Find the most recently completed set (not "00")
+    for (let i = sets.length - 1; i >= 0; i--) {
+      const set = sets[i];
+      if (set && set !== '00' && set.length >= 2) {
+        const player1Games = parseInt(set[0]);
+        const player2Games = parseInt(set[1]);
+        return player1Games > player2Games ? 1 : 2;
+      }
+    }
+    
+    return 1; // Default fallback
+  }
+
+  /**
    * Detect if score change represents a completed set
    * @param {string} oldScore - Previous score
    * @param {string} newScore - New score
@@ -585,6 +606,7 @@ class EventGeneratorService {
         players,
         previousScore: oldScore,
         currentScore: newScore,
+        setWinner: this.getSetWinner(newScore),
         tournament: this.extractTournamentName(match),
         round: this.extractRound(match)
       },
