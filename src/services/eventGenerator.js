@@ -342,6 +342,10 @@ class EventGeneratorService {
         // Check for special score events first
         if (this.isSetCompletion(oldValue, newValue)) {
           event = this.createSetCompletedEvent(match, matchId, oldValue, newValue);
+          // Fall back to score update if we couldn't reliably determine set winner
+          if (!event) {
+            event = this.createScoreUpdateEvent(match, matchId, oldValue, newValue);
+          }
         } else if (this.isGameWin(oldValue, newValue)) {
           event = this.createGameWonEvent(match, matchId, oldValue, newValue);
         } else if (this.isTiebreakStart(oldValue, newValue)) {
@@ -387,6 +391,10 @@ class EventGeneratorService {
    * @returns {number} 1 or 2 indicating winner position in players array
    */
   getSetWinner(score) {
+    if (!score || typeof score !== 'string') {
+      return null;
+    }
+    
     const sets = score.trim().split(/\s+/);
     
     // Find the most recently completed set (not "00")
@@ -395,11 +403,20 @@ class EventGeneratorService {
       if (set && set !== '00' && set.length >= 2) {
         const player1Games = parseInt(set[0]);
         const player2Games = parseInt(set[1]);
+        
+        // Basic validation - games should be reasonable tennis scores
+        if (isNaN(player1Games) || isNaN(player2Games) || 
+            player1Games < 0 || player2Games < 0 ||
+            player1Games > 7 || player2Games > 7 ||
+            (player1Games < 6 && player2Games < 6)) {
+          return null;
+        }
+        
         return player1Games > player2Games ? 1 : 2;
       }
     }
     
-    return 1; // Default fallback
+    return null; // No valid completed set found
   }
 
   /**
@@ -593,6 +610,13 @@ class EventGeneratorService {
    * @returns {Object} Set completed event
    */
   createSetCompletedEvent(match, matchId, oldScore, newScore) {
+    const setWinner = this.getSetWinner(newScore);
+    
+    // Skip event generation if we can't reliably determine the winner
+    if (setWinner === null) {
+      return null;
+    }
+    
     const tournamentId = this.extractTournamentId(match);
     const players = this.extractPlayerNames(match);
     const description = `Set completed: ${players.join(' vs ')} - ${newScore}`;
@@ -606,7 +630,7 @@ class EventGeneratorService {
         players,
         previousScore: oldScore,
         currentScore: newScore,
-        setWinner: this.getSetWinner(newScore),
+        setWinner: setWinner,
         tournament: this.extractTournamentName(match),
         round: this.extractRound(match)
       },
