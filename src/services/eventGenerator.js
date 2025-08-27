@@ -1518,14 +1518,17 @@ class EventGeneratorService {
   /**
    * Extract partner data from team object
    * @param {Object} playerTeam - Team object containing partner fields
+   * @param {boolean} useFirstInitial - Use first initial instead of full first name
    * @returns {Object} {firstName, lastName, fullName}
    */
-  extractPartnerData(playerTeam) {
+  extractPartnerData(playerTeam, useFirstInitial = false) {
     if (!playerTeam || (!playerTeam.PartnerFirstName && !playerTeam.PartnerLastName)) {
       return { firstName: '', lastName: '', fullName: '' };
     }
     
-    const firstName = playerTeam.PartnerFirstName || '';
+    // Choose between first initial and full name based on parameter
+    const fullFirstName = playerTeam.PartnerFirstNameFull || playerTeam.PartnerFirstName || '';
+    const firstName = useFirstInitial && fullFirstName ? `${fullFirstName.charAt(0)}.` : fullFirstName;
     const lastName = playerTeam.PartnerLastName || '';
     const fullName = `${firstName} ${lastName}`.trim() || 'Unknown';
     
@@ -1554,14 +1557,19 @@ class EventGeneratorService {
     
     // ATP API format: PlayerTeam1/PlayerTeam2 with PlayerFirstNameFull/PlayerLastName
     if (match.PlayerTeam1 && match.PlayerTeam2) {
+      // Detect if this is doubles by checking if either team has a partner
+      const isDoubles = Boolean(match.PlayerTeam1.PartnerId || match.PlayerTeam2.PartnerId);
+      
       // Use the shared helper functions for consistency
       const formatPlayerTeam = (playerTeam) => {
         if (!playerTeam) return 'Unknown';
         
-        const playerData = this.extractPlayerDataFromFields(playerTeam, false); // Use full name for singles
+        // For doubles, use first initials to save space; for singles, use full names
+        const useFirstInitial = isDoubles;
+        const playerData = this.extractPlayerDataFromFields(playerTeam, useFirstInitial);
         
-        // Handle doubles - if there's a partner, show both players
-        const partnerData = this.extractPartnerData(playerTeam);
+        // Handle doubles - if there's a partner, show both players with consistent naming
+        const partnerData = this.extractPartnerData(playerTeam, useFirstInitial);
         if (partnerData.fullName) {
           return `${playerData.fullName}/${partnerData.fullName}`;
         }
@@ -1580,22 +1588,22 @@ class EventGeneratorService {
   /**
    * Extract structured player objects from live match data (for live match events)
    * @param {Object} match - Live match object
-   * @returns {Array} Array of player objects with {name, playerId} structure
+   * @returns {Array} Array of player objects with {name, playerId, teamId} structure
    */
   extractPlayersFromMatch(match) {
     if (!match) return [];
     
     const players = [];
     
-    // Extract PlayerTeam1
+    // Extract PlayerTeam1 with teamId: 1
     if (match.PlayerTeam1) {
-      const team1Players = this.extractPlayerObjectsFromTeam(match.PlayerTeam1);
+      const team1Players = this.extractPlayerObjectsFromTeam(match.PlayerTeam1, 1);
       players.push(...team1Players);
     }
     
-    // Extract PlayerTeam2
+    // Extract PlayerTeam2 with teamId: 2
     if (match.PlayerTeam2) {
-      const team2Players = this.extractPlayerObjectsFromTeam(match.PlayerTeam2);
+      const team2Players = this.extractPlayerObjectsFromTeam(match.PlayerTeam2, 2);
       players.push(...team2Players);
     }
     
@@ -1605,9 +1613,10 @@ class EventGeneratorService {
   /**
    * Extract player objects from a team (handles both singles and doubles)
    * @param {Object} playerTeam - PlayerTeam object from live match
+   * @param {number} teamId - Team identifier (1 for first team, 2 for second team)
    * @returns {Array} Array of player objects
    */
-  extractPlayerObjectsFromTeam(playerTeam) {
+  extractPlayerObjectsFromTeam(playerTeam, teamId = null) {
     if (!playerTeam) return [];
     
     const players = [];
@@ -1618,20 +1627,35 @@ class EventGeneratorService {
       const useFirstInitial = Boolean(playerTeam.PartnerId);
       const playerData = this.extractPlayerDataFromFields(playerTeam, useFirstInitial);
       
-      players.push({
+      const playerObj = {
         name: playerData.fullName,
         playerId: playerTeam.PlayerId
-      });
+      };
+      
+      // Add teamId if provided for consistency with draw events
+      if (teamId !== null) {
+        playerObj.teamId = teamId;
+      }
+      
+      players.push(playerObj);
     }
     
     // Partner (for doubles)
     if (playerTeam.PartnerId) {
-      const partnerData = this.extractPartnerData(playerTeam);
+      const useFirstInitial = Boolean(playerTeam.PartnerId); // Same logic as main player
+      const partnerData = this.extractPartnerData(playerTeam, useFirstInitial);
       
-      players.push({
+      const partnerObj = {
         name: partnerData.fullName,
         playerId: playerTeam.PartnerId
-      });
+      };
+      
+      // Add teamId if provided for consistency with draw events
+      if (teamId !== null) {
+        partnerObj.teamId = teamId;
+      }
+      
+      players.push(partnerObj);
     }
     
     return players;
