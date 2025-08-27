@@ -369,7 +369,9 @@ class LogReplay {
           }
         }
 
-        const events = this.eventGenerator.processData(apiEndpoint, apiData);
+        // Convert fileTimestamp to ISO format for events
+        const isoTimestamp = new Date(fileTimestamp).toISOString();
+        const events = this.eventGenerator.processData(apiEndpoint, apiData, isoTimestamp);
         
         // Apply filters in sequence
         let filteredEvents = events;
@@ -467,7 +469,8 @@ class LogReplay {
     let previousFile = null;
     
     for (let i = 0; i < logFiles.length; i++) {
-      const file = logFiles[i];
+      const fileInfo = logFiles[i];
+      const file = typeof fileInfo === 'string' ? fileInfo : fileInfo.path;
       
       try {
         // Read and parse log file

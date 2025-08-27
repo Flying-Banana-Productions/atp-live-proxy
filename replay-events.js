@@ -224,12 +224,21 @@ async function deliverEventsRealtime(events, options) {
   const sortedEvents = events.sort((a, b) => 
     new Date(a.logTimestamp) - new Date(b.logTimestamp));
 
+  const isFastMode = !options.webhookRealtime;
+  
   if (isSimulation) {
     console.log(`\n🔍 Starting webhook delivery dry-run (no http calls)...`);
+  } else if (isFastMode) {
+    console.log(`\nStarting fast webhook delivery to ${options.webhookUrl}...`);
   } else {
     console.log(`\nStarting real-time webhook delivery to ${options.webhookUrl}...`);
   }
-  console.log(`Delivery settings: speed=${options.webhookSpeed}x, max-interval=${options.webhookMaxInterval}s`);
+  
+  if (isFastMode) {
+    console.log('Delivery mode: Fast (no timing delays)');
+  } else {
+    console.log(`Delivery settings: speed=${options.webhookSpeed}x, max-interval=${options.webhookMaxInterval}s`);
+  }
   console.log('Press Ctrl+C to interrupt delivery\n');
 
   let delivered = 0;
@@ -250,8 +259,8 @@ async function deliverEventsRealtime(events, options) {
       const event = sortedEvents[i];
       const currentTime = new Date(event.logTimestamp);
       
-      // Calculate and apply timing delay
-      if (previousTime) {
+      // Calculate and apply timing delay (skip in fast mode)
+      if (previousTime && !isFastMode) {
         const intervalMs = currentTime - previousTime;
         const cappedInterval = Math.min(intervalMs, options.webhookMaxInterval * 1000);
         const adjustedInterval = cappedInterval / options.webhookSpeed;
@@ -319,6 +328,14 @@ async function deliverEventsRealtime(events, options) {
     console.log(`   ✅ ${delivered} events simulated successfully`);
     console.log(`   ⏱️  Original timespan: ${duration} (${sortedEvents.length} events)`);
     console.log(`   🔍 All webhook calls were dry-run - no actual HTTP requests sent`);
+  } else if (isFastMode) {
+    console.log(`\n📊 Fast webhook delivery ${interrupted ? 'interrupted' : 'complete'}:`);
+    console.log(`   ✅ ${delivered} events delivered successfully`);
+    if (failed > 0) {
+      console.log(`   ❌ ${failed} events failed`);
+    }
+    console.log(`   ⏱️  Original timespan: ${duration} (${sortedEvents.length} events)`);
+    console.log(`   🚀 Fast mode: events delivered without timing delays`);
   } else {
     console.log(`\n📊 Real-time delivery ${interrupted ? 'interrupted' : 'complete'}:`);
     console.log(`   ✅ ${delivered} events delivered successfully`);
@@ -359,9 +376,10 @@ program
   .option('--prune', 'Delete redundant duplicate log files (keeps earliest)')
   .option('--prune-dry-run', 'Show what files would be deleted without actually deleting')
   .option('--show-service-logs', 'Show service module logs (webhook, events, cache, etc.)')
-  .option('--webhook-url <url>', 'Webhook endpoint URL for real-time event delivery')
+  .option('--webhook-url <url>', 'Webhook endpoint URL for event delivery')
   .option('--webhook-secret <secret>', 'HMAC secret for webhook authentication')
-  .option('--webhook-realtime', 'Enable real-time webhook delivery with original timing')
+  .option('--webhook-deliver', 'Enable webhook delivery (fast mode by default)')
+  .option('--webhook-realtime', 'Enable real-time webhook delivery with original timing (requires --webhook-deliver)')
   .option('--webhook-dry-run', 'Simulate webhook delivery with full timing but skip HTTP calls')
   .option('--webhook-max-interval <seconds>', 'Maximum interval between events in seconds (default: 60)', '60')
   .option('--webhook-speed <multiplier>', 'Speed multiplier for event delivery (e.g., 2.0 = 2x speed)', '1.0');
@@ -437,11 +455,16 @@ if (endpoints.length === 0) {
   endpoints = ['live-matches'];
 }
 
-// Validate webhook options (except for webhook dry run mode)
-if (options.webhookRealtime && !options.webhookDryRun && (!options.webhookUrl || !options.webhookSecret)) {
-  console.error('Error: --webhook-url and --webhook-secret are required when using --webhook-realtime');
-  console.error('Usage: node replay-events.js --webhook-realtime --webhook-url <url> --webhook-secret <secret>');
-  console.error('Note: URL and secret are optional when using --webhook-dry-run');
+// Validate webhook options
+if (options.webhookDeliver && (!options.webhookUrl || !options.webhookSecret)) {
+  console.error('Error: --webhook-url and --webhook-secret are required when using --webhook-deliver');
+  console.error('Usage: node replay-events.js --webhook-deliver --webhook-url <url> --webhook-secret <secret>');
+  process.exit(1);
+}
+
+if (options.webhookRealtime && !options.webhookDeliver) {
+  console.error('Error: --webhook-realtime requires --webhook-deliver to be specified');
+  console.error('Usage: node replay-events.js --webhook-deliver --webhook-realtime --webhook-url <url> --webhook-secret <secret>');
   process.exit(1);
 }
 
@@ -549,8 +572,8 @@ async function main() {
 
     const results = await replayer.replayLogs(files);
 
-    // Webhook real-time delivery if enabled
-    if (options.webhookRealtime) {
+    // Webhook delivery if enabled
+    if (options.webhookDeliver) {
       const deliveryResult = await deliverEventsRealtime(results.events, options);
       
       // Don't show regular output if delivery was interrupted

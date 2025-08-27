@@ -33,7 +33,7 @@ The system monitors the ATP API's draw data structure (`Associations[] → Event
 ```json
 {
   "event_type": "draw_match_result",
-  "timestamp": "2025-08-26T13:10:41.577Z",
+  "event_timestamp": "2025-08-26T13:10:41.577Z",
   "tournament_id": "3473",
   "match_id": "QS009",
   "description": "Draw match completed: Inaki Montes-De La Torre vs Gabriele Pennaforti - Gabriele Pennaforti wins 6/2 4/6 6/3",
@@ -91,7 +91,7 @@ The system monitors the ATP API's draw data structure (`Associations[] → Event
 ```json
 {
   "event_type": "draw_player_advanced",
-  "timestamp": "2025-08-26T13:10:41.573Z",
+  "event_timestamp": "2025-08-26T13:10:41.573Z",
   "tournament_id": "3473",
   "match_id": "MS017",
   "description": "Thiago Monteiro advanced to bottom position in Round of 32",
@@ -137,7 +137,7 @@ The system monitors the ATP API's draw data structure (`Associations[] → Event
 ```json
 {
   "event_type": "draw_round_completed",
-  "timestamp": "2025-08-26T13:10:41.587Z",
+  "event_timestamp": "2025-08-26T13:10:41.587Z",
   "tournament_id": "3473",
   "match_id": "round-1",
   "description": "Qualifying Round 2 completed in Men's Qualifying Singles - 6 winners advance",
@@ -194,7 +194,7 @@ The system monitors the ATP API's draw data structure (`Associations[] → Event
 ```json
 {
   "event_type": "draw_tournament_completed",
-  "timestamp": "2025-08-26T13:10:41.587Z",
+  "event_timestamp": "2025-08-26T13:10:41.587Z",
   "tournament_id": "3473",
   "match_id": "MS001",
   "description": "Tournament completed: Player 1 wins Men's Singles - 6/4 6/2",
@@ -232,7 +232,7 @@ All draw events follow this consistent structure:
 ```json
 {
   "event_type": "draw_*",
-  "timestamp": "2025-08-26T13:10:41.573Z",
+  "event_timestamp": "2025-08-26T13:10:41.573Z",
   "tournament_id": "string",
   "match_id": "string",
   "description": "Human-readable event description",
@@ -250,7 +250,7 @@ All draw events follow this consistent structure:
 ### Field Descriptions
 
 - **`event_type`**: One of the 4 draw event types
-- **`timestamp`**: ISO 8601 timestamp when event was generated
+- **`event_timestamp`**: ISO 8601 timestamp when event was generated
 - **`tournament_id`**: ATP tournament ID (e.g., "3473")
 - **`match_id`**: Unique match identifier (format: "MS017", "QS009", "MD012", or special identifiers for rounds)
 - **`description`**: Human-readable event summary
@@ -299,7 +299,7 @@ For doubles matches, all four players are included in the `players` array with t
 ```json
 {
   "event_type": "draw_match_result",
-  "timestamp": "2025-08-27T12:05:23.851Z",
+  "event_timestamp": "2025-08-27T12:05:23.851Z",
   "tournament_id": "3473",
   "match_id": "MD010",
   "description": "Draw match completed: V. Cornea/S. Rodriguez Taverna vs F. Bondioli/C. Caniato - V. Cornea/S. Rodriguez Taverna wins 7/6(2) 7/6(6)",
@@ -526,3 +526,24 @@ As of v2.1.0, live match events (e.g., `match_started`, `score_update`, `match_c
 ## Webhook Delivery
 
 Events are delivered via webhook in the order they're generated, with retry logic for failed deliveries. Higher priority events may receive preferential delivery treatment depending on your webhook configuration.
+
+### Webhook Payload Structure
+
+When events are delivered via webhook, the payload includes both the original event timestamp and a webhook delivery timestamp:
+
+```json
+{
+  "event_type": "draw_match_result",
+  "event_timestamp": "2025-08-26T08:45:02.124Z",  // Original event time (preserved from logs)
+  "timestamp": "2025-08-27T16:44:06.844Z",        // Webhook delivery time (for HMAC signature)
+  "tournament_id": "3473",
+  "match_id": "MS031",
+  "description": "...",
+  "data": { ... }
+}
+```
+
+**Important Notes:**
+- **`event_timestamp`**: The original time when the event occurred (preserved from log data during replay)
+- **`timestamp`**: The current time when the webhook is delivered (required for HMAC signature verification)
+- Both timestamps are included to preserve historical accuracy while enabling proper webhook authentication

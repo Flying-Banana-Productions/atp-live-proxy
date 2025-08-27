@@ -45,13 +45,13 @@ const EVENT_PRIORITY = {
  * @param {string} matchId - Unique match identifier
  * @param {string} description - Human-readable event description
  * @param {Object} data - Event-specific data
- * @param {Object} options - Additional options (priority, metadata)
+ * @param {Object} options - Additional options (priority, metadata, timestamp)
  * @returns {Object} Standardized event object
  */
 function createEvent(eventType, tournamentId, matchId, description, data = {}, options = {}) {
   return {
     event_type: eventType,
-    timestamp: new Date().toISOString(),
+    event_timestamp: options.timestamp || new Date().toISOString(),
     tournament_id: tournamentId.toString(),
     match_id: matchId,
     description,
@@ -73,7 +73,7 @@ function createEvent(eventType, tournamentId, matchId, description, data = {}, o
  * @returns {boolean} True if valid event structure
  */
 function validateEvent(event) {
-  const requiredFields = ['event_type', 'timestamp', 'match_id', 'description', 'data'];
+  const requiredFields = ['event_type', 'event_timestamp', 'match_id', 'description', 'data'];
   return requiredFields.every(field => Object.prototype.hasOwnProperty.call(event, field)) &&
          Object.values(EVENT_TYPES).includes(event.event_type);
 }

@@ -22,9 +22,10 @@ class EventGeneratorService {
    * Process endpoint data and generate events based on JSON diff changes
    * @param {string} endpoint - API endpoint path
    * @param {Object} currentData - Current polling data
+   * @param {string} [timestamp] - Optional timestamp to use for events (defaults to current time)
    * @returns {Array} Generated events
    */
-  processData(endpoint, currentData) {
+  processData(endpoint, currentData, timestamp = null) {
     if (!this.isEnabled || !currentData || !this.monitoredEndpoints.has(endpoint)) {
       console.log(`[EVENTS] Ignoring endpoint ${endpoint}`);
       return [];
@@ -52,10 +53,10 @@ class EventGeneratorService {
         // Process changes based on endpoint type
         switch (endpoint) {
         case '/api/live-matches':
-          events.push(...this.processLiveMatchChanges(changeset, currentData, previousData));
+          events.push(...this.processLiveMatchChanges(changeset, currentData, previousData, timestamp));
           break;
         case '/api/draws/live':
-          events.push(...this.processDrawChanges(changeset, currentData, previousData));
+          events.push(...this.processDrawChanges(changeset, currentData, previousData, timestamp));
           break;
         default:
           //console.log(`[EVENTS] No change handler for endpoint: ${endpoint}`);
@@ -144,7 +145,7 @@ class EventGeneratorService {
    * @param {Object} previousData - Previous match data for comparison (optional, will use state if not provided)
    * @returns {Array} Generated match events
    */
-  processLiveMatchChanges(changeset, currentData, previousData = null) {
+  processLiveMatchChanges(changeset, currentData, previousData = null, timestamp = null) {
     const events = [];
     
     // Get previous data for comparison - use parameter if provided, otherwise fallback to state
@@ -171,7 +172,7 @@ class EventGeneratorService {
         // Only create started event if match is not finished AND not already in progress
         const matchStatus = this.extractStatus(match);
         if (matchStatus !== 'F' && matchStatus !== 'P') {
-          const startedEvent = this.createMatchStartedEvent(match);
+          const startedEvent = this.createMatchStartedEvent(match, timestamp);
           if (startedEvent) events.push(startedEvent);
         } else {
           console.log(`[EVENTS] Skipping match started event for new match ${matchId} - status: ${matchStatus}`);
@@ -185,7 +186,7 @@ class EventGeneratorService {
         console.log(`[EVENTS] Match removed: ${matchId}`);
         // Only send finished event if we haven't already sent one for this match
         if (!this.finishedMatches.has(matchId)) {
-          const finishedEvent = this.createMatchFinishedEvent(match);
+          const finishedEvent = this.createMatchFinishedEvent(match, timestamp);
           if (finishedEvent) {
             events.push(finishedEvent);
             this.finishedMatches.add(matchId);
@@ -202,7 +203,7 @@ class EventGeneratorService {
         const fieldChanges = this.detectMatchFieldChanges(previousMatch, currentMatch);
         if (fieldChanges.length > 0) {
           //console.log(`[EVENTS] Match ${matchId} field changes:`, fieldChanges.map(c => `${c.field}: ${c.oldValue} -> ${c.newValue}`));
-          const changeEvents = this.createEventFromFieldChanges(fieldChanges, currentMatch, matchId);
+          const changeEvents = this.createEventFromFieldChanges(fieldChanges, currentMatch, matchId, timestamp);
           events.push(...changeEvents);
         }
       }
@@ -222,7 +223,7 @@ class EventGeneratorService {
    * @param {Map} matchMap - Map of current matches by ID
    * @returns {Array} Array of generated events
    */
-  createEventFromMatchChange(change, matchMap) {
+  createEventFromMatchChange(change, matchMap, timestamp = null) {
     const { type, key, value, changes } = change;
 
     switch (type) {
@@ -234,7 +235,7 @@ class EventGeneratorService {
           // Only create "started" event if match is actually in progress
           const matchStatus = this.extractStatus(value);
           if (matchStatus !== 'F' && matchStatus !== 'finished') {
-            return [this.createMatchStartedEvent(value)];
+            return [this.createMatchStartedEvent(value, timestamp)];
           } else {
             console.log(`[EVENTS] Skipping match started event for ADD ${matchId} - match is already finished (status: ${matchStatus})`);
             return [];
@@ -248,7 +249,7 @@ class EventGeneratorService {
       if (value) {
         const matchId = this.extractMatchId(value);
         if (matchId) {
-          return [this.createMatchFinishedEvent(value)];
+          return [this.createMatchFinishedEvent(value, timestamp)];
         }
       }
       break;
@@ -330,7 +331,7 @@ class EventGeneratorService {
    * @param {string} matchId - Match identifier
    * @returns {Array} Array of generated events
    */
-  createEventFromFieldChanges(changes, match, matchId) {
+  createEventFromFieldChanges(changes, match, matchId, timestamp = null) {
     const events = [];
     
     // Process each field change and generate appropriate events
@@ -343,33 +344,33 @@ class EventGeneratorService {
       if (fieldName === 'score') {
         // Check for special score events first
         if (this.isSetCompletion(oldValue, newValue)) {
-          event = this.createSetCompletedEvent(match, matchId, oldValue, newValue);
+          event = this.createSetCompletedEvent(match, matchId, oldValue, newValue, timestamp);
           // Fall back to score update if we couldn't reliably determine set winner
           if (!event) {
-            event = this.createScoreUpdateEvent(match, matchId, oldValue, newValue);
+            event = this.createScoreUpdateEvent(match, matchId, oldValue, newValue, timestamp);
           }
         } else {
           // Regular score update
-          event = this.createScoreUpdateEvent(match, matchId, oldValue, newValue);
+          event = this.createScoreUpdateEvent(match, matchId, oldValue, newValue, timestamp);
         }
       }
 
       // Court changes
       else if (fieldName === 'court') {
-        event = this.createCourtChangeEvent(match, matchId, oldValue, newValue);
+        event = this.createCourtChangeEvent(match, matchId, oldValue, newValue, timestamp);
       }
 
       // Status changes
       else if (fieldName === 'status') {
         // Special handling for 'F' (Finished) status
         if (newValue === 'F' && !this.finishedMatches.has(matchId)) {
-          event = this.createMatchFinishedEvent(match);
+          event = this.createMatchFinishedEvent(match, timestamp);
           if (event) {
             this.finishedMatches.add(matchId);
           }
         } else if (newValue !== 'F') {
           // For all other status changes, use the regular status change event
-          event = this.createStatusChangeEvent(match, matchId, oldValue, newValue);
+          event = this.createStatusChangeEvent(match, matchId, oldValue, newValue, timestamp);
         }
         // If status is 'F' and we've already sent finished event, skip
       }
@@ -486,7 +487,7 @@ class EventGeneratorService {
    * @param {Object} match - Match object
    * @returns {Object} Match started event
    */
-  createMatchStartedEvent(match) {
+  createMatchStartedEvent(match, timestamp = null) {
     const tournamentId = this.extractTournamentId(match);
     const matchId = this.extractMatchId(match);
     const playerNames = this.extractPlayerNames(match);
@@ -505,7 +506,7 @@ class EventGeneratorService {
         court: this.extractCourt(match),
         initialScore: this.extractScore(match)
       },
-      { priority: EVENT_PRIORITY.HIGH }
+      { priority: EVENT_PRIORITY.HIGH, timestamp }
     );
   }
 
@@ -515,7 +516,7 @@ class EventGeneratorService {
    * @param {Object} oldMatchData - Previous match data for context
    * @returns {Object} Match finished event
    */
-  createMatchFinishedEvent(match, oldMatchData = null) {
+  createMatchFinishedEvent(match, timestamp = null, oldMatchData = null) {
     const tournamentId = this.extractTournamentId(match);
     const matchId = this.extractMatchId(match);
     const playerNames = this.extractPlayerNames(match);
@@ -534,7 +535,7 @@ class EventGeneratorService {
         tournament: this.extractTournamentName(match),
         round: this.extractRound(match)
       },
-      { priority: EVENT_PRIORITY.HIGH }
+      { priority: EVENT_PRIORITY.HIGH, timestamp }
     );
   }
 
@@ -546,7 +547,7 @@ class EventGeneratorService {
    * @param {string} newScore - New score
    * @returns {Object} Score update event
    */
-  createScoreUpdateEvent(match, matchId, oldScore, newScore) {
+  createScoreUpdateEvent(match, matchId, oldScore, newScore, timestamp = null) {
     const tournamentId = this.extractTournamentId(match);
     const playerNames = this.extractPlayerNames(match);
     const playerObjects = this.extractPlayersFromMatch(match);
@@ -564,7 +565,7 @@ class EventGeneratorService {
         tournament: this.extractTournamentName(match),
         round: this.extractRound(match)
       },
-      { priority: EVENT_PRIORITY.MEDIUM }
+      { priority: EVENT_PRIORITY.MEDIUM, timestamp }
     );
   }
 
@@ -576,7 +577,7 @@ class EventGeneratorService {
    * @param {string} newScore - New score
    * @returns {Object} Set completed event
    */
-  createSetCompletedEvent(match, matchId, oldScore, newScore) {
+  createSetCompletedEvent(match, matchId, oldScore, newScore, timestamp = null) {
     const setWinner = this.getSetWinner(newScore);
     
     // Skip event generation if we can't reliably determine the winner
@@ -602,7 +603,7 @@ class EventGeneratorService {
         tournament: this.extractTournamentName(match),
         round: this.extractRound(match)
       },
-      { priority: EVENT_PRIORITY.HIGH }
+      { priority: EVENT_PRIORITY.HIGH, timestamp }
     );
   }
 
@@ -615,7 +616,7 @@ class EventGeneratorService {
    * @param {string} newCourt - New court
    * @returns {Object} Court change event
    */
-  createCourtChangeEvent(match, matchId, oldCourt, newCourt) {
+  createCourtChangeEvent(match, matchId, oldCourt, newCourt, timestamp = null) {
     const tournamentId = this.extractTournamentId(match);
     const playerNames = this.extractPlayerNames(match);
     const playerObjects = this.extractPlayersFromMatch(match);
@@ -633,7 +634,7 @@ class EventGeneratorService {
         tournament: this.extractTournamentName(match),
         round: this.extractRound(match)
       },
-      { priority: EVENT_PRIORITY.MEDIUM }
+      { priority: EVENT_PRIORITY.MEDIUM, timestamp }
     );
   }
 
@@ -689,7 +690,7 @@ class EventGeneratorService {
    * @param {string} newStatus - New status
    * @returns {Object} Status change event
    */
-  createStatusChangeEvent(match, matchId, oldStatus, newStatus) {
+  createStatusChangeEvent(match, matchId, oldStatus, newStatus, timestamp = null) {
     const tournamentId = this.extractTournamentId(match);
     const playerNames = this.extractPlayerNames(match);
     const playerObjects = this.extractPlayersFromMatch(match);
@@ -748,7 +749,7 @@ class EventGeneratorService {
         tournament: this.extractTournamentName(match),
         round: this.extractRound(match)
       },
-      { priority: statusInfo.priority }
+      { priority: statusInfo.priority, timestamp }
     );
   }
 
@@ -759,7 +760,7 @@ class EventGeneratorService {
    * @param {Object} drawData - Original draw data
    * @returns {Object} Draw match result event
    */
-  createDrawMatchResultEvent(fixture, drawData = null) {
+  createDrawMatchResultEvent(fixture, drawData = null, timestamp = null) {
     if (!fixture || !fixture._context) return null;
     
     const tournamentId = fixture._context.tournamentId;
@@ -827,7 +828,7 @@ class EventGeneratorService {
           code: this.getRoundCode(fixture._context.roundName, fixture._context.roundIdModernized)
         }
       },
-      { priority: EVENT_PRIORITY.MEDIUM }
+      { priority: EVENT_PRIORITY.MEDIUM, timestamp }
     );
   }
 
@@ -838,7 +839,7 @@ class EventGeneratorService {
    * @param {Object} previousFixture - Previous fixture
    * @returns {Object} Player advancement event
    */
-  createDrawPlayerAdvancedEvent(currentFixture, previousFixture, drawData = null) {
+  createDrawPlayerAdvancedEvent(currentFixture, previousFixture, drawData = null, timestamp = null) {
     if (!currentFixture || !currentFixture._context) return null;
     
     const tournamentId = currentFixture._context.tournamentId;
@@ -903,7 +904,7 @@ class EventGeneratorService {
         advancementType,
         position: advancementType === 'top' ? 'top' : 'bottom'
       },
-      { priority: EVENT_PRIORITY.HIGH }
+      { priority: EVENT_PRIORITY.HIGH, timestamp }
     );
   }
 
@@ -913,7 +914,7 @@ class EventGeneratorService {
    * @param {Array} fixtures - Completed fixtures
    * @returns {Object} Round completion event
    */
-  createDrawRoundCompletedEvent(roundName, fixtures, drawData = null) {
+  createDrawRoundCompletedEvent(roundName, fixtures, drawData = null, timestamp = null) {
     if (!fixtures || fixtures.length === 0 || !fixtures[0]._context) return null;
     
     const context = fixtures[0]._context;
@@ -953,7 +954,7 @@ class EventGeneratorService {
         },
         matchesCompleted: fixtures.length
       },
-      { priority: EVENT_PRIORITY.HIGH }
+      { priority: EVENT_PRIORITY.HIGH, timestamp }
     );
   }
 
@@ -964,7 +965,7 @@ class EventGeneratorService {
    * @param {Object} fixture - Final fixture
    * @returns {Object} Tournament completion event
    */
-  createDrawTournamentCompletedEvent(fixture, drawData = null) {
+  createDrawTournamentCompletedEvent(fixture, drawData = null, timestamp = null) {
     if (!fixture || !fixture._context || fixture.Winner === 0) return null;
     
     const tournamentId = fixture._context.tournamentId;
@@ -1176,7 +1177,7 @@ class EventGeneratorService {
    * @param {Object} previousData - Previous draw data for comparison
    * @returns {Array} Generated draw events
    */
-  processDrawChanges(changeset, currentData, previousData = null) {
+  processDrawChanges(changeset, currentData, previousData = null, timestamp = null) {
     const events = [];
     
     // Get previous data for comparison - use parameter if provided, otherwise fallback to state
@@ -1203,21 +1204,21 @@ class EventGeneratorService {
       if (previousFixture) {
         // Check for match completion (normal or walkover)
         if (previousFixture.Winner === 0 && currentFixture.Winner !== 0) {
-          const matchResultEvent = this.createDrawMatchResultEvent(currentFixture, currentData);
+          const matchResultEvent = this.createDrawMatchResultEvent(currentFixture, currentData, timestamp);
           if (matchResultEvent) events.push(matchResultEvent);
         }
         
         // Check for player advancement (IsTopKnown/IsBottomKnown changes)
         if ((!previousFixture.IsTopKnown && currentFixture.IsTopKnown) ||
             (!previousFixture.IsBottomKnown && currentFixture.IsBottomKnown)) {
-          const advancementEvent = this.createDrawPlayerAdvancedEvent(currentFixture, previousFixture, currentData);
+          const advancementEvent = this.createDrawPlayerAdvancedEvent(currentFixture, previousFixture, currentData, timestamp);
           if (advancementEvent) events.push(advancementEvent);
         }
       }
     }
     
     // Check for round completion and special draw events
-    const roundEvents = this.checkForRoundCompletionEvents(currentFixtures, previousFixtures, currentData);
+    const roundEvents = this.checkForRoundCompletionEvents(currentFixtures, previousFixtures, currentData, timestamp);
     events.push(...roundEvents);
     
     console.log(`[EVENTS] Generated ${events.length} draw events`);
@@ -1231,7 +1232,7 @@ class EventGeneratorService {
    * @param {Object} drawData - Original draw data
    * @returns {Array} Round/tournament completion events
    */
-  checkForRoundCompletionEvents(currentFixtures, previousFixtures, drawData = null) {
+  checkForRoundCompletionEvents(currentFixtures, previousFixtures, drawData = null, timestamp = null) {
     const events = [];
     
     // Group fixtures by round
@@ -1246,12 +1247,12 @@ class EventGeneratorService {
       const isRoundComplete = this.isRoundCompleted(fixtures);
       
       if (!wasRoundComplete && isRoundComplete) {
-        const roundEvent = this.createDrawRoundCompletedEvent(roundName, fixtures, drawData);
+        const roundEvent = this.createDrawRoundCompletedEvent(roundName, fixtures, drawData, timestamp);
         if (roundEvent) events.push(roundEvent);
         
         // Check for tournament final completion
         if (roundName.toLowerCase().includes('final') && fixtures.length === 1) {
-          const tournamentEvent = this.createDrawTournamentCompletedEvent(fixtures[0], drawData);
+          const tournamentEvent = this.createDrawTournamentCompletedEvent(fixtures[0], drawData, timestamp);
           if (tournamentEvent) events.push(tournamentEvent);
         }
       }
