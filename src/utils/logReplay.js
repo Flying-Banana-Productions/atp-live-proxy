@@ -412,8 +412,23 @@ class LogReplay {
           console.log(`[DEBUG] Generated ${filteredEvents.length} events from this file\n`);
         }
 
+        // Sort events by logical priority before applying microsecond offsets
+        const eventPriorities = {
+          'draw_match_result': 0,        // Match completes first
+          'draw_player_advanced': 1,     // Players advance after match completion
+          'draw_round_completed': 2,     // Round completes after all advancements
+          'draw_tournament_completed': 3 // Tournament completes last
+        };
+        
+        // Sort events by priority to ensure logical ordering
+        const sortedEvents = [...filteredEvents].sort((a, b) => {
+          const priorityA = eventPriorities[a.event_type] ?? 999; // Unknown events last
+          const priorityB = eventPriorities[b.event_type] ?? 999;
+          return priorityA - priorityB;
+        });
+
         // Add events to results with file context and microsecond offsets
-        filteredEvents.forEach((event, eventIndex) => {
+        sortedEvents.forEach((event, eventIndex) => {
           // Add microsecond offset to ensure unique timestamps for events from same log file
           const baseTime = new Date(event.event_timestamp);
           const offsetTime = new Date(baseTime.getTime() + eventIndex);
