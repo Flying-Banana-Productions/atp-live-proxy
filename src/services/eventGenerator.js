@@ -846,37 +846,50 @@ class EventGeneratorService {
     const matchCode = currentFixture.MatchCode;
     
     let advancementType = 'unknown';
-    let advancingPlayer = null;
+    let advancingPlayers = [];
     let description = '';
     
     // Extract player data based on which position became known
     if (!previousFixture.IsTopKnown && currentFixture.IsTopKnown) {
       advancementType = 'top';
-      // Extract player from DrawLineTop (advancing players are stored here, not in Result)
+      // Extract all players from DrawLineTop (advancing players are stored here, not in Result)
       if (currentFixture.DrawLineTop && currentFixture.DrawLineTop.Players && currentFixture.DrawLineTop.Players.length > 0) {
-        const player = currentFixture.DrawLineTop.Players[0];
-        advancingPlayer = {
-          name: this.formatDrawPlayerName(player),
-          playerId: player.PlayerId || null
-        };
+        const isDoubles = currentFixture.DrawLineTop.Players.length > 1;
+        advancingPlayers = currentFixture.DrawLineTop.Players.map(player => {
+          const playerData = this.extractPlayerDataFromDrawFields(player, isDoubles);
+          return {
+            name: playerData.fullName,
+            playerId: player.PlayerId || null
+          };
+        });
       }
     } else if (!previousFixture.IsBottomKnown && currentFixture.IsBottomKnown) {
       advancementType = 'bottom';
-      // Extract player from DrawLineBottom
+      // Extract all players from DrawLineBottom
       if (currentFixture.DrawLineBottom && currentFixture.DrawLineBottom.Players && currentFixture.DrawLineBottom.Players.length > 0) {
-        const player = currentFixture.DrawLineBottom.Players[0];
-        advancingPlayer = {
-          name: this.formatDrawPlayerName(player),
-          playerId: player.PlayerId || null
-        };
+        const isDoubles = currentFixture.DrawLineBottom.Players.length > 1;
+        advancingPlayers = currentFixture.DrawLineBottom.Players.map(player => {
+          const playerData = this.extractPlayerDataFromDrawFields(player, isDoubles);
+          return {
+            name: playerData.fullName,
+            playerId: player.PlayerId || null
+          };
+        });
       }
     } else {
       return null;
     }
     
-    // Create description with player name if available
-    const playerName = advancingPlayer?.name || 'Unknown player';
-    description = `${playerName} advanced to ${advancementType} position in ${currentFixture._context.roundName}`;
+    // Create description with player names
+    if (advancingPlayers.length === 1) {
+      const playerName = advancingPlayers[0]?.name || 'Unknown player';
+      description = `${playerName} advanced to ${advancementType} position in ${currentFixture._context.roundName}`;
+    } else if (advancingPlayers.length > 1) {
+      const playerNames = advancingPlayers.map(p => p.name).join(' / ');
+      description = `${playerNames} advanced to ${advancementType} position in ${currentFixture._context.roundName}`;
+    } else {
+      description = `Unknown players advanced to ${advancementType} position in ${currentFixture._context.roundName}`;
+    }
     
     // Get enhanced tournament context
     const enhancedContext = this.createEnhancedTournamentContext(currentFixture, drawData);
@@ -887,7 +900,7 @@ class EventGeneratorService {
       matchCode,
       description,
       {
-        player: advancingPlayer,  // Now includes the actual player who advanced
+        players: advancingPlayers,  // Now includes all players who advanced (supports both singles and doubles)
         toRound: currentFixture._context.roundName,
         // Enhanced tournament context
         tournament: enhancedContext?.tournament || {

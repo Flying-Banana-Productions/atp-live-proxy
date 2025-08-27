@@ -83,11 +83,11 @@ The system monitors the ATP API's draw data structure (`Associations[] → Event
 
 ### 2. `draw_player_advanced`
 
-**When triggered:** A player advances to the next round (IsTopKnown or IsBottomKnown changes from false to true)  
+**When triggered:** Players advance to the next round (IsTopKnown or IsBottomKnown changes from false to true)  
 **Priority:** High  
-**Description:** Generated when a player secures their spot in the next round
+**Description:** Generated when players secure their spot in the next round
 
-**Example:**
+**Singles Example:**
 ```json
 {
   "event_type": "draw_player_advanced",
@@ -96,10 +96,12 @@ The system monitors the ATP API's draw data structure (`Associations[] → Event
   "match_id": "MS017",
   "description": "Thiago Monteiro advanced to bottom position in Round of 32",
   "data": {
-    "player": {
-      "name": "Thiago Monteiro",
-      "playerId": "MJ08"
-    },
+    "players": [
+      {
+        "name": "Thiago Monteiro",
+        "playerId": "MJ08"
+      }
+    ],
     "toRound": "Round of 32",
     "tournament": {
       "id": "3473",
@@ -118,6 +120,52 @@ The system monitors the ATP API's draw data structure (`Associations[] → Event
     },
     "advancementType": "bottom",
     "position": "bottom"
+  },
+  "priority": "high",
+  "metadata": {
+    "source": "atp-live-proxy",
+    "version": "1.0.0"
+  }
+}
+```
+
+**Doubles Example:**
+```json
+{
+  "event_type": "draw_player_advanced",
+  "event_timestamp": "2025-08-26T13:10:41.573Z",
+  "tournament_id": "3473",
+  "match_id": "MD012",
+  "description": "J. Smith / M. Johnson advanced to top position in Round of 16",
+  "data": {
+    "players": [
+      {
+        "name": "J. Smith",
+        "playerId": "JS01"
+      },
+      {
+        "name": "M. Johnson", 
+        "playerId": "MJ02"
+      }
+    ],
+    "toRound": "Round of 16",
+    "tournament": {
+      "id": "3473",
+      "name": "Como, ITA",
+      "phase": "main_draw",
+      "drawSize": 32,
+      "eventType": "MD",
+      "eventDescription": "Men's Doubles"
+    },
+    "round": {
+      "id": 4,
+      "name": "Round of 16",
+      "code": "R16",
+      "modernizedId": 4,
+      "stage": 5
+    },
+    "advancementType": "top",
+    "position": "top"
   },
   "priority": "high",
   "metadata": {
