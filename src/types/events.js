@@ -21,8 +21,12 @@ const EVENT_TYPES = {
   CORRECTION_MODE: 'correction_mode',
   WARMUP_STARTED: 'warmup_started',
   UMPIRE_ON_COURT: 'umpire_on_court',
-  DRAW_UPDATED: 'draw_updated',
-  DRAW_PAIRING_ANNOUNCED: 'draw_pairing_announced'
+  DRAW_MATCH_RESULT: 'draw_match_result',
+  DRAW_PLAYER_ADVANCED: 'draw_player_advanced',
+  DRAW_SEMIFINAL_SET: 'draw_semifinal_set',
+  DRAW_FINAL_SET: 'draw_final_set',
+  DRAW_ROUND_COMPLETED: 'draw_round_completed',
+  DRAW_TOURNAMENT_COMPLETED: 'draw_tournament_completed'
 };
 
 /**

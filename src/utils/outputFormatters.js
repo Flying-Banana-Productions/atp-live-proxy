@@ -118,7 +118,7 @@ function extractPlayersFromEvents(matchEvents) {
   const descriptions = matchEvents.map(e => e.description).filter(Boolean);
   for (const desc of descriptions) {
     // Look for pattern "Player1 vs Player2" in descriptions
-    const vsMatch = desc.match(/^[^:]+:\s*(.+?)\s+vs\s+(.+?)\s+[-\(\d]/);
+    const vsMatch = desc.match(/^[^:]+:\s*(.+?)\s+vs\s+(.+?)\s+[-(\d]/);
     if (vsMatch) {
       return [vsMatch[1], vsMatch[2]];
     }
@@ -180,8 +180,8 @@ function formatTable(results, colorsEnabled = true, groupByMatch = false) {
       output.push(colorize('─'.repeat(matchHeader.length), colors.dim, colorsEnabled));
       
       // Table header for this match
-      const tableHeader = 'Date       | Time     | Event Type       | Description';
-      const tableSeparator = '-----------|----------|------------------|---------------------------';
+      const tableHeader = 'Date       | Time     | Event Type           | Description';
+      const tableSeparator = '-----------|----------|----------------------|---------------------------';
       
       output.push(colorize(tableHeader, colors.bright, colorsEnabled));
       output.push(colorize(tableSeparator, colors.dim, colorsEnabled));
@@ -196,7 +196,7 @@ function formatTable(results, colorsEnabled = true, groupByMatch = false) {
           new Date(event.logTimestamp).toTimeString().substring(0, 8) : 
           'Unknown';
         
-        const eventType = event.event_type.padEnd(16);
+        const eventType = event.event_type.padEnd(20);
         const description = event.description || 'No description';
 
         // Apply color to event type
@@ -221,8 +221,8 @@ function formatTable(results, colorsEnabled = true, groupByMatch = false) {
     });
   } else {
     // Original table format - all events in one table
-    const tableHeader = 'Date       | Time     | Event Type       | Match ID | Description';
-    const tableSeparator = '-----------|----------|------------------|----------|---------------------------';
+    const tableHeader = 'Date       | Time     | Event Type           | Match ID | Description';
+    const tableSeparator = '-----------|----------|----------------------|----------|---------------------------';
     
     output.push(colorize(tableHeader, colors.bright, colorsEnabled));
     output.push(colorize(tableSeparator, colors.dim, colorsEnabled));
@@ -237,7 +237,7 @@ function formatTable(results, colorsEnabled = true, groupByMatch = false) {
         new Date(event.logTimestamp).toTimeString().substring(0, 8) : 
         'Unknown';
       
-      const eventType = event.event_type.padEnd(16);
+      const eventType = event.event_type.padEnd(20);
       const matchId = (event.match_id || 'N/A').padEnd(8);
       const description = event.description || 'No description';
 

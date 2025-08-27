@@ -275,23 +275,45 @@ class LogReplay {
         }
 
         // Process through event generator
-        const endpoint = `/api/${this.endpoint}`;
+        // Map endpoint names to actual API paths
+        const endpointMapping = {
+          'live-matches': '/api/live-matches',
+          'draws-live': '/api/draws/live'
+        };
+        const endpoint = endpointMapping[this.endpoint] || `/api/${this.endpoint}`;
         
         if (this.verbose) {
-          // Debug: Show what matches we're extracting from this file
-          const currentMatches = this.eventGenerator.extractMatches(apiData);
           console.log(`\n[DEBUG] File ${i + 1}: ${path.basename(filePath)}`);
-          console.log(`[DEBUG] Extracted ${currentMatches.length} matches:`, 
-            currentMatches.map(m => `${m.MatchId} (${m.Status})`).join(', '));
           
-          // Debug: Show previous state if it exists
-          const previousState = this.eventGenerator.previousStates.get(endpoint);
-          if (previousState) {
-            const previousMatches = this.eventGenerator.extractMatches(previousState);
-            console.log(`[DEBUG] Previous state had ${previousMatches.length} matches:`, 
-              previousMatches.map(m => `${m.MatchId} (${m.Status})`).join(', '));
+          // Debug: Show what data we're extracting based on endpoint type
+          if (endpoint === '/api/live-matches') {
+            const currentMatches = this.eventGenerator.extractMatches(apiData);
+            console.log(`[DEBUG] Extracted ${currentMatches.length} matches:`, 
+              currentMatches.map(m => `${m.MatchId} (${m.Status})`).join(', '));
+              
+            // Debug: Show previous state if it exists
+            const previousState = this.eventGenerator.previousStates.get(endpoint);
+            if (previousState) {
+              const previousMatches = this.eventGenerator.extractMatches(previousState);
+              console.log(`[DEBUG] Previous state had ${previousMatches.length} matches:`, 
+                previousMatches.map(m => `${m.MatchId} (${m.Status})`).join(', '));
+            } else {
+              console.log('[DEBUG] No previous state found');
+            }
+          } else if (endpoint === '/api/draws/live') {
+            const currentFixtures = this.eventGenerator.extractDrawFixtures(apiData);
+            console.log(`[DEBUG] Extracted ${currentFixtures.length} draw fixtures`);
+            
+            // Debug: Show previous state if it exists  
+            const previousState = this.eventGenerator.previousStates.get(endpoint);
+            if (previousState) {
+              const previousFixtures = this.eventGenerator.extractDrawFixtures(previousState);
+              console.log(`[DEBUG] Previous state had ${previousFixtures.length} fixtures`);
+            } else {
+              console.log('[DEBUG] No previous state found');
+            }
           } else {
-            console.log('[DEBUG] No previous state found');
+            console.log(`[DEBUG] Unknown endpoint type: ${endpoint}`);
           }
         }
 

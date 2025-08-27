@@ -55,7 +55,7 @@ class EventGeneratorService {
           events.push(...this.processLiveMatchChanges(changeset, currentData, previousData));
           break;
         case '/api/draws/live':
-          events.push(...this.processDrawChanges(changeset, currentData));
+          events.push(...this.processDrawChanges(changeset, currentData, previousData));
           break;
         default:
           //console.log(`[EVENTS] No change handler for endpoint: ${endpoint}`);
@@ -126,8 +126,10 @@ class EventGeneratorService {
       return {
         ...baseOptions,
         embeddedObjKeys: {
-          'draws': '$index',
-          'matches': '$index'
+          'Associations': '$index',
+          'Events': '$index',
+          'Rounds': '$index',
+          'Fixtures': 'MatchCode'
         }
       };
     default:
@@ -525,8 +527,9 @@ class EventGeneratorService {
   createMatchStartedEvent(match) {
     const tournamentId = this.extractTournamentId(match);
     const matchId = this.extractMatchId(match);
-    const players = this.extractPlayerNames(match);
-    const description = `Match started: ${players.join(' vs ')}`;
+    const playerNames = this.extractPlayerNames(match);
+    const playerObjects = this.extractPlayersFromMatch(match);
+    const description = `Match started: ${playerNames.join(' vs ')}`;
     
     return createEvent(
       EVENT_TYPES.MATCH_STARTED,
@@ -534,7 +537,7 @@ class EventGeneratorService {
       matchId,
       description,
       {
-        players,
+        players: playerObjects,
         tournament: this.extractTournamentName(match),
         round: this.extractRound(match),
         court: this.extractCourt(match),
@@ -553,9 +556,10 @@ class EventGeneratorService {
   createMatchFinishedEvent(match, oldMatchData = null) {
     const tournamentId = this.extractTournamentId(match);
     const matchId = this.extractMatchId(match);
-    const players = this.extractPlayerNames(match);
+    const playerNames = this.extractPlayerNames(match);
+    const playerObjects = this.extractPlayersFromMatch(match);
     const finalScore = this.extractScore(oldMatchData || match);
-    const description = `Match finished: ${players.join(' vs ')} (${finalScore})`;
+    const description = `Match finished: ${playerNames.join(' vs ')} (${finalScore})`;
     
     return createEvent(
       EVENT_TYPES.MATCH_FINISHED,
@@ -563,7 +567,7 @@ class EventGeneratorService {
       matchId,
       description,
       {
-        players,
+        players: playerObjects,
         finalScore,
         tournament: this.extractTournamentName(match),
         round: this.extractRound(match)
@@ -582,8 +586,9 @@ class EventGeneratorService {
    */
   createScoreUpdateEvent(match, matchId, oldScore, newScore) {
     const tournamentId = this.extractTournamentId(match);
-    const players = this.extractPlayerNames(match);
-    const description = `Score update: ${players.join(' vs ')} - ${newScore}`;
+    const playerNames = this.extractPlayerNames(match);
+    const playerObjects = this.extractPlayersFromMatch(match);
+    const description = `Score update: ${playerNames.join(' vs ')} - ${newScore}`;
     
     return createEvent(
       EVENT_TYPES.SCORE_UPDATED,
@@ -591,7 +596,7 @@ class EventGeneratorService {
       matchId,
       description,
       {
-        players,
+        players: playerObjects,
         previousScore: oldScore,
         currentScore: newScore,
         tournament: this.extractTournamentName(match),
@@ -618,8 +623,9 @@ class EventGeneratorService {
     }
     
     const tournamentId = this.extractTournamentId(match);
-    const players = this.extractPlayerNames(match);
-    const description = `Set completed: ${players.join(' vs ')} - ${newScore}`;
+    const playerNames = this.extractPlayerNames(match);
+    const playerObjects = this.extractPlayersFromMatch(match);
+    const description = `Set completed: ${playerNames.join(' vs ')} - ${newScore}`;
     
     return createEvent(
       EVENT_TYPES.SET_COMPLETED,
@@ -627,10 +633,10 @@ class EventGeneratorService {
       matchId,
       description,
       {
-        players,
+        players: playerObjects,
         previousScore: oldScore,
         currentScore: newScore,
-        setWinner: setWinner,
+        setWinner,
         tournament: this.extractTournamentName(match),
         round: this.extractRound(match)
       },
@@ -648,8 +654,9 @@ class EventGeneratorService {
    */
   createGameWonEvent(match, matchId, oldScore, newScore) {
     const tournamentId = this.extractTournamentId(match);
-    const players = this.extractPlayerNames(match);
-    const description = `Game completed: ${players.join(' vs ')} - ${newScore}`;
+    const playerNames = this.extractPlayerNames(match);
+    const playerObjects = this.extractPlayersFromMatch(match);
+    const description = `Game completed: ${playerNames.join(' vs ')} - ${newScore}`;
     
     return createEvent(
       EVENT_TYPES.GAME_WON,
@@ -657,7 +664,7 @@ class EventGeneratorService {
       matchId,
       description,
       {
-        players,
+        players: playerObjects,
         previousScore: oldScore,
         currentScore: newScore,
         tournament: this.extractTournamentName(match),
@@ -677,8 +684,9 @@ class EventGeneratorService {
    */
   createCourtChangeEvent(match, matchId, oldCourt, newCourt) {
     const tournamentId = this.extractTournamentId(match);
-    const players = this.extractPlayerNames(match);
-    const description = `Court changed: ${players.join(' vs ')} moved from ${oldCourt} to ${newCourt}`;
+    const playerNames = this.extractPlayerNames(match);
+    const playerObjects = this.extractPlayersFromMatch(match);
+    const description = `Court changed: ${playerNames.join(' vs ')} moved from ${oldCourt} to ${newCourt}`;
     
     return createEvent(
       EVENT_TYPES.COURT_CHANGED,
@@ -686,7 +694,7 @@ class EventGeneratorService {
       matchId,
       description,
       {
-        players,
+        players: playerObjects,
         previousCourt: oldCourt,
         currentCourt: newCourt,
         tournament: this.extractTournamentName(match),
@@ -750,48 +758,49 @@ class EventGeneratorService {
    */
   createStatusChangeEvent(match, matchId, oldStatus, newStatus) {
     const tournamentId = this.extractTournamentId(match);
-    const players = this.extractPlayerNames(match);
+    const playerNames = this.extractPlayerNames(match);
+    const playerObjects = this.extractPlayersFromMatch(match);
     const statusInfo = this.getAtpStatusEventInfo(newStatus, oldStatus);
     
-    let description = `Status change: ${players.join(' vs ')}`;
+    let description = `Status change: ${playerNames.join(' vs ')}`;
     
     // Create descriptive messages based on status
     switch (newStatus) {
     case 'C':
-      description = `Umpire on court: ${players.join(' vs ')}`;
+      description = `Umpire on court: ${playerNames.join(' vs ')}`;
       break;
     case 'W':
-      description = `Warmup started: ${players.join(' vs ')}`;
+      description = `Warmup started: ${playerNames.join(' vs ')}`;
       break;
     case 'P':
       if (oldStatus === 'S') {
-        description = `Match resumed: ${players.join(' vs ')}`;
+        description = `Match resumed: ${playerNames.join(' vs ')}`;
       } else if (oldStatus === 'W') {
-        description = `Match play began: ${players.join(' vs ')}`;
+        description = `Match play began: ${playerNames.join(' vs ')}`;
       } else {
-        description = `Match in progress: ${players.join(' vs ')}`;
+        description = `Match in progress: ${playerNames.join(' vs ')}`;
       }
       break;
     case 'S':
-      description = `Match suspended: ${players.join(' vs ')}`;
+      description = `Match suspended: ${playerNames.join(' vs ')}`;
       break;
     case 'D':
-      description = `Toilet break: ${players.join(' vs ')}`;
+      description = `Toilet break: ${playerNames.join(' vs ')}`;
       break;
     case 'M':
-      description = `Medical timeout: ${players.join(' vs ')}`;
+      description = `Medical timeout: ${playerNames.join(' vs ')}`;
       break;
     case 'R':
-      description = `Challenge in progress: ${players.join(' vs ')}`;
+      description = `Challenge in progress: ${playerNames.join(' vs ')}`;
       break;
     case 'E':
-      description = `Correction mode: ${players.join(' vs ')}`;
+      description = `Correction mode: ${playerNames.join(' vs ')}`;
       break;
     case 'F':
-      description = `Match finished: ${players.join(' vs ')}`;
+      description = `Match finished: ${playerNames.join(' vs ')}`;
       break;
     default:
-      description = `Status change: ${players.join(' vs ')} - ${newStatus}`;
+      description = `Status change: ${playerNames.join(' vs ')} - ${newStatus}`;
     }
     
     return createEvent(
@@ -800,7 +809,7 @@ class EventGeneratorService {
       matchId,
       description,
       {
-        players,
+        players: playerObjects,
         previousStatus: oldStatus,
         currentStatus: newStatus,
         tournament: this.extractTournamentName(match),
@@ -818,8 +827,9 @@ class EventGeneratorService {
    */
   createTiebreakStartedEvent(match, matchId) {
     const tournamentId = this.extractTournamentId(match);
-    const players = this.extractPlayerNames(match);
-    const description = `Tiebreak started: ${players.join(' vs ')}`;
+    const playerNames = this.extractPlayerNames(match);
+    const playerObjects = this.extractPlayersFromMatch(match);
+    const description = `Tiebreak started: ${playerNames.join(' vs ')}`;
     
     return createEvent(
       EVENT_TYPES.TIEBREAK_STARTED,
@@ -827,12 +837,301 @@ class EventGeneratorService {
       matchId,
       description,
       {
-        players,
+        players: playerObjects,
         currentScore: this.extractScore(match),
         tournament: this.extractTournamentName(match),
         round: this.extractRound(match)
       },
       { priority: EVENT_PRIORITY.HIGH }
+    );
+  }
+
+  /**
+   * Create draw match result event (handles both normal completion and walkovers)
+   * @param {Object} fixture - Draw fixture object
+   * @param {Object} drawData - Original draw data
+   * @returns {Object} Draw match result event
+   */
+  createDrawMatchResultEvent(fixture, drawData = null) {
+    if (!fixture || !fixture._context) return null;
+    
+    const tournamentId = fixture._context.tournamentId;
+    const matchCode = fixture.MatchCode;
+    const winner = fixture.Winner;
+    const score = fixture.ResultString || 'Score not available';
+    
+    const { topPlayer, bottomPlayer } = this.extractPlayersFromFixture(fixture);
+    
+    const playerNames = [
+      topPlayer?.name || 'Unknown Player',
+      bottomPlayer?.name || 'Unknown Player'
+    ];
+    
+    const winnerName = winner === 1 ? playerNames[0] : playerNames[1];
+    const winnerPlayer = winner === 1 ? topPlayer : bottomPlayer;
+    
+    // Determine result type
+    const isWalkover = this.isWalkoverOrRetirement(score);
+    const resultType = isWalkover ? 'walkover' : 'completed';
+    
+    // Build description based on result type
+    const description = isWalkover 
+      ? `Walkover: ${playerNames.join(' vs ')} - ${winnerName} advances (${score})`
+      : `Draw match completed: ${playerNames.join(' vs ')} - ${winnerName} wins ${score}`;
+    
+    // Get enhanced tournament context
+    const enhancedContext = this.createEnhancedTournamentContext(fixture, drawData);
+    
+    return createEvent(
+      EVENT_TYPES.DRAW_MATCH_RESULT,
+      tournamentId,
+      matchCode,
+      description,
+      {
+        resultType,  // 'completed' or 'walkover'
+        // Normalized player objects
+        players: [topPlayer, bottomPlayer].filter(p => p !== null),
+        winner: winnerPlayer,
+        score,
+        // Enhanced tournament context
+        tournament: enhancedContext?.tournament || {
+          id: fixture._context.tournamentId,
+          name: fixture._context.tournamentName,
+          phase: 'main_draw',
+          eventType: fixture._context.eventType,
+          eventDescription: fixture._context.eventDescription
+        },
+        round: enhancedContext?.round || {
+          name: fixture._context.roundName,
+          code: this.getRoundCode(fixture._context.roundName, fixture._context.roundIdModernized)
+        }
+      },
+      { priority: EVENT_PRIORITY.MEDIUM }
+    );
+  }
+
+
+  /**
+   * Create draw player advanced event
+   * @param {Object} currentFixture - Current fixture
+   * @param {Object} previousFixture - Previous fixture
+   * @returns {Object} Player advancement event
+   */
+  createDrawPlayerAdvancedEvent(currentFixture, previousFixture, drawData = null) {
+    if (!currentFixture || !currentFixture._context) return null;
+    
+    const tournamentId = currentFixture._context.tournamentId;
+    const matchCode = currentFixture.MatchCode;
+    
+    let advancementType = 'unknown';
+    let advancingPlayer = null;
+    let description = '';
+    
+    // Extract player data based on which position became known
+    if (!previousFixture.IsTopKnown && currentFixture.IsTopKnown) {
+      advancementType = 'top';
+      // Extract player from DrawLineTop (advancing players are stored here, not in Result)
+      if (currentFixture.DrawLineTop && currentFixture.DrawLineTop.Players && currentFixture.DrawLineTop.Players.length > 0) {
+        const player = currentFixture.DrawLineTop.Players[0];
+        advancingPlayer = {
+          name: this.formatDrawPlayerName(player),
+          playerId: player.PlayerId || null
+        };
+      }
+    } else if (!previousFixture.IsBottomKnown && currentFixture.IsBottomKnown) {
+      advancementType = 'bottom';
+      // Extract player from DrawLineBottom
+      if (currentFixture.DrawLineBottom && currentFixture.DrawLineBottom.Players && currentFixture.DrawLineBottom.Players.length > 0) {
+        const player = currentFixture.DrawLineBottom.Players[0];
+        advancingPlayer = {
+          name: this.formatDrawPlayerName(player),
+          playerId: player.PlayerId || null
+        };
+      }
+    } else {
+      return null;
+    }
+    
+    // Create description with player name if available
+    const playerName = advancingPlayer?.name || 'Unknown player';
+    description = `${playerName} advanced to ${advancementType} position in ${currentFixture._context.roundName}`;
+    
+    // Get enhanced tournament context
+    const enhancedContext = this.createEnhancedTournamentContext(currentFixture, drawData);
+    
+    return createEvent(
+      EVENT_TYPES.DRAW_PLAYER_ADVANCED,
+      tournamentId,
+      matchCode,
+      description,
+      {
+        player: advancingPlayer,  // Now includes the actual player who advanced
+        toRound: currentFixture._context.roundName,
+        // Enhanced tournament context
+        tournament: enhancedContext?.tournament || {
+          id: currentFixture._context.tournamentId,
+          name: currentFixture._context.tournamentName,
+          phase: 'main_draw',
+          eventType: currentFixture._context.eventType,
+          eventDescription: currentFixture._context.eventDescription
+        },
+        round: enhancedContext?.round || {
+          name: currentFixture._context.roundName,
+          code: this.getRoundCode(currentFixture._context.roundName, currentFixture._context.roundIdModernized)
+        },
+        advancementType,
+        position: advancementType === 'top' ? 'top' : 'bottom'
+      },
+      { priority: EVENT_PRIORITY.HIGH }
+    );
+  }
+
+  /**
+   * Create draw round completed event
+   * @param {string} roundName - Round name
+   * @param {Array} fixtures - Completed fixtures
+   * @returns {Object} Round completion event
+   */
+  createDrawRoundCompletedEvent(roundName, fixtures, drawData = null) {
+    if (!fixtures || fixtures.length === 0 || !fixtures[0]._context) return null;
+    
+    const context = fixtures[0]._context;
+    const tournamentId = context.tournamentId;
+    
+    // Extract winner player objects
+    const winnerPlayers = fixtures.map(fixture => {
+      const winner = fixture.Winner;
+      const { topPlayer, bottomPlayer } = this.extractPlayersFromFixture(fixture);
+      return winner === 1 ? topPlayer : bottomPlayer;
+    }).filter(player => player !== null);
+    
+    const description = `${roundName} completed in ${context.eventDescription} - ${winnerPlayers.length} winners advance`;
+    
+    // Get enhanced tournament context from first fixture
+    const enhancedContext = this.createEnhancedTournamentContext(fixtures[0], drawData);
+    
+    return createEvent(
+      EVENT_TYPES.DRAW_ROUND_COMPLETED,
+      tournamentId,
+      `round-${context.roundId}`,
+      description,
+      {
+        round: roundName,
+        winners: winnerPlayers,  // Now player objects instead of strings
+        // Enhanced tournament context
+        tournament: enhancedContext?.tournament || {
+          id: context.tournamentId,
+          name: context.tournamentName,
+          phase: 'main_draw',
+          eventType: context.eventType,
+          eventDescription: context.eventDescription
+        },
+        roundDetails: enhancedContext?.round || {
+          name: roundName,
+          code: this.getRoundCode(roundName, context.roundIdModernized)
+        },
+        matchesCompleted: fixtures.length
+      },
+      { priority: EVENT_PRIORITY.HIGH }
+    );
+  }
+
+  /**
+   * Create draw semifinal set event
+   * @param {Array} fixtures - Semifinal fixtures
+   * @returns {Object} Semifinal set event
+   */
+  createDrawSemifinalSetEvent(fixtures, drawData = null) {
+    if (!fixtures || fixtures.length === 0 || !fixtures[0]._context) return null;
+    
+    const context = fixtures[0]._context;
+    const tournamentId = context.tournamentId;
+    
+    // Extract finalist player objects
+    const finalistPlayers = fixtures.map(fixture => {
+      const winner = fixture.Winner;
+      const { topPlayer, bottomPlayer } = this.extractPlayersFromFixture(fixture);
+      return winner === 1 ? topPlayer : bottomPlayer;
+    }).filter(player => player !== null);
+    
+    // Extract names for description
+    const finalistNames = finalistPlayers.map(p => p?.name || 'Unknown');
+    
+    const description = `${context.eventDescription} final set: ${finalistNames.join(' vs ')}`;
+    
+    // Get enhanced tournament context from first fixture
+    const enhancedContext = this.createEnhancedTournamentContext(fixtures[0], drawData);
+    
+    return createEvent(
+      EVENT_TYPES.DRAW_FINAL_SET,
+      tournamentId,
+      'final-set',
+      description,
+      {
+        finalists: finalistPlayers,  // Now player objects instead of strings
+        // Enhanced tournament context
+        tournament: enhancedContext?.tournament || {
+          id: context.tournamentId,
+          name: context.tournamentName,
+          phase: 'main_draw',
+          eventType: context.eventType,
+          eventDescription: context.eventDescription
+        }
+      },
+      { priority: EVENT_PRIORITY.HIGH }
+    );
+  }
+
+  /**
+   * Create draw final set event (for when final matchup is determined)
+   * @param {Array} fixtures - Final preparation fixtures
+   * @returns {Object} Final set event
+   */
+  createDrawFinalSetEvent(fixtures, drawData = null) {
+    // This is essentially the same as semifinal set for now
+    return this.createDrawSemifinalSetEvent(fixtures, drawData);
+  }
+
+  /**
+   * Create draw tournament completed event
+   * @param {Object} fixture - Final fixture
+   * @returns {Object} Tournament completion event
+   */
+  createDrawTournamentCompletedEvent(fixture, drawData = null) {
+    if (!fixture || !fixture._context || fixture.Winner === 0) return null;
+    
+    const tournamentId = fixture._context.tournamentId;
+    const winner = fixture.Winner;
+    const score = fixture.ResultString || 'Score not available';
+    
+    const { topPlayer, bottomPlayer } = this.extractPlayersFromFixture(fixture);
+    
+    const champion = winner === 1 ? topPlayer : bottomPlayer;
+    const finalist = winner === 1 ? bottomPlayer : topPlayer;
+    const description = `Tournament completed: ${champion?.name || 'Unknown'} wins ${fixture._context.eventDescription} - ${score}`;
+    
+    // Get enhanced tournament context
+    const enhancedContext = this.createEnhancedTournamentContext(fixture, drawData);
+    
+    return createEvent(
+      EVENT_TYPES.DRAW_TOURNAMENT_COMPLETED,
+      tournamentId,
+      fixture.MatchCode,
+      description,
+      {
+        champion,  // Now player object instead of string
+        finalist,  // Now player object instead of string
+        finalScore: score,
+        // Enhanced tournament context
+        tournament: enhancedContext?.tournament || {
+          id: fixture._context.tournamentId,
+          name: fixture._context.tournamentName,
+          phase: 'main_draw',
+          eventType: fixture._context.eventType,
+          eventDescription: fixture._context.eventDescription
+        }
+      },
+      { priority: EVENT_PRIORITY.CRITICAL }
     );
   }
 
@@ -845,15 +1144,375 @@ class EventGeneratorService {
    */
 
   /**
-   * Process draw changes (placeholder for future implementation)
-   * @param {Array} changeset - Array of atomic changes
+   * Extract all fixtures from draw data structure
+   * @param {Object} drawData - Draw data from ATP API
+   * @returns {Array} Array of all fixtures with context
+   */
+  extractDrawFixtures(drawData) {
+    if (!drawData || !drawData.Associations) {
+      return [];
+    }
+
+    const allFixtures = [];
+    for (const association of drawData.Associations) {
+      if (association.Events) {
+        for (const event of association.Events) {
+          if (event.Rounds) {
+            for (const round of event.Rounds) {
+              if (round.Fixtures) {
+                for (const fixture of round.Fixtures) {
+                  // Add context information to fixture
+                  allFixtures.push({
+                    ...fixture,
+                    _context: {
+                      tournamentId: association.TournamentId,
+                      tournamentName: drawData.Location,
+                      eventType: event.EventTypeCode,
+                      eventDescription: event.Description,
+                      roundId: round.RoundId,
+                      roundName: round.RoundName,
+                      roundIdModernized: round.RoundIdModernized
+                    }
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    
+    return allFixtures;
+  }
+
+  /**
+   * Create fixture map keyed by MatchCode
+   * @param {Array} fixtures - Array of fixtures
+   * @returns {Map} Map of fixtures keyed by MatchCode
+   */
+  createDrawFixtureMap(fixtures) {
+    const map = new Map();
+    
+    fixtures.forEach(fixture => {
+      if (fixture.MatchCode) {
+        map.set(fixture.MatchCode, fixture);
+      }
+    });
+    
+    return map;
+  }
+
+  /**
+   * Extract player information from fixture team
+   * @param {Object} team - Team object (TeamTop or TeamBottom)
+   * @returns {Object} Player information
+   */
+  extractPlayerFromTeam(team) {
+    if (!team || !team.Player) return null;
+    
+    const player = team.Player;
+    const formattedName = this.formatDrawPlayerName(player);
+    
+    return {
+      name: formattedName,
+      playerId: player.PlayerId || null
+    };
+  }
+
+  /**
+   * Extract players from fixture result
+   * @param {Object} fixture - Draw fixture object
+   * @returns {Object} Object with topPlayer and bottomPlayer
+   */
+  extractPlayersFromFixture(fixture) {
+    if (!fixture || !fixture.Result) {
+      return { topPlayer: null, bottomPlayer: null };
+    }
+    
+    return {
+      topPlayer: this.extractPlayerFromTeam(fixture.Result.TeamTop),
+      bottomPlayer: this.extractPlayerFromTeam(fixture.Result.TeamBottom)
+    };
+  }
+
+  /**
+   * Format draw player name from player object (for draw events)
+   * @param {Object} player - Player object from draw fixture
+   * @returns {string} Formatted player name
+   */
+  formatDrawPlayerName(player) {
+    if (!player) return 'Unknown';
+    
+    const firstName = player.FirstName || '';
+    const lastName = player.LastName || '';
+    const fullName = `${firstName} ${lastName}`.trim();
+    
+    return fullName || 'Unknown';
+  }
+
+  /**
+   * Check if a match result represents a walkover or retirement
+   * @param {string} resultString - Match result string
+   * @returns {boolean} True if walkover/retirement
+   */
+  isWalkoverOrRetirement(resultString) {
+    if (!resultString) return false;
+    
+    const result = resultString.toUpperCase();
+    return result.includes('W.O.') || 
+           result.includes('RET') || 
+           result.includes('WALKOVER') ||
+           result.includes('RETIRED');
+  }
+
+  /**
+   * Determine if all matches in a round are completed
+   * @param {Array} fixtures - Fixtures for a specific round
+   * @returns {boolean} True if round is complete
+   */
+  isRoundCompleted(fixtures) {
+    if (!fixtures || fixtures.length === 0) return false;
+    
+    return fixtures.every(fixture => 
+      fixture.Winner !== undefined && fixture.Winner !== 0
+    );
+  }
+
+  /**
+   * Process draw changes using fixture comparison
+   * @param {Array} changeset - Array of atomic changes (for compatibility)
    * @param {Object} currentData - Current draw data
+   * @param {Object} previousData - Previous draw data for comparison
    * @returns {Array} Generated draw events
    */
-  processDrawChanges(changeset, _currentData) {
-    // Placeholder for future draw event detection using changeset
-    console.log(`[EVENTS] Draw changes detected: ${changeset.length} changes`);
-    return [];
+  processDrawChanges(changeset, currentData, previousData = null) {
+    const events = [];
+    
+    // Get previous data for comparison - use parameter if provided, otherwise fallback to state
+    if (!previousData) {
+      previousData = this.previousStates.get('/api/draws/live');
+      if (!previousData) {
+        console.log('[EVENTS] No previous draw data for comparison, skipping event generation');
+        return events;
+      }
+    }
+
+    // Extract fixtures from both datasets
+    const previousFixtures = this.extractDrawFixtures(previousData);
+    const currentFixtures = this.extractDrawFixtures(currentData);
+    
+    // Create maps for efficient comparison
+    const previousFixtureMap = this.createDrawFixtureMap(previousFixtures);
+    const currentFixtureMap = this.createDrawFixtureMap(currentFixtures);
+    
+    // Compare fixtures for changes
+    for (const [matchCode, currentFixture] of currentFixtureMap) {
+      const previousFixture = previousFixtureMap.get(matchCode);
+      
+      if (previousFixture) {
+        // Check for match completion (normal or walkover)
+        if (previousFixture.Winner === 0 && currentFixture.Winner !== 0) {
+          const matchResultEvent = this.createDrawMatchResultEvent(currentFixture, currentData);
+          if (matchResultEvent) events.push(matchResultEvent);
+        }
+        
+        // Check for player advancement (IsTopKnown/IsBottomKnown changes)
+        if ((!previousFixture.IsTopKnown && currentFixture.IsTopKnown) ||
+            (!previousFixture.IsBottomKnown && currentFixture.IsBottomKnown)) {
+          const advancementEvent = this.createDrawPlayerAdvancedEvent(currentFixture, previousFixture, currentData);
+          if (advancementEvent) events.push(advancementEvent);
+        }
+      }
+    }
+    
+    // Check for round completion and special draw events
+    const roundEvents = this.checkForRoundCompletionEvents(currentFixtures, previousFixtures, currentData);
+    events.push(...roundEvents);
+    
+    console.log(`[EVENTS] Generated ${events.length} draw events`);
+    return events;
+  }
+
+  /**
+   * Check for round completion and tournament progression events
+   * @param {Array} currentFixtures - Current fixtures
+   * @param {Array} previousFixtures - Previous fixtures
+   * @param {Object} drawData - Original draw data
+   * @returns {Array} Round/tournament completion events
+   */
+  checkForRoundCompletionEvents(currentFixtures, previousFixtures, drawData = null) {
+    const events = [];
+    
+    // Group fixtures by round
+    const currentRounds = this.groupFixturesByRound(currentFixtures);
+    const previousRounds = this.groupFixturesByRound(previousFixtures);
+    
+    for (const [roundName, fixtures] of currentRounds) {
+      const previousRoundFixtures = previousRounds.get(roundName) || [];
+      
+      // Check if round just completed
+      const wasRoundComplete = this.isRoundCompleted(previousRoundFixtures);
+      const isRoundComplete = this.isRoundCompleted(fixtures);
+      
+      if (!wasRoundComplete && isRoundComplete) {
+        const roundEvent = this.createDrawRoundCompletedEvent(roundName, fixtures, drawData);
+        if (roundEvent) events.push(roundEvent);
+        
+        // Check for special cases (semifinals, final)
+        if (roundName.toLowerCase().includes('semifinal')) {
+          const sfEvent = this.createDrawSemifinalSetEvent(fixtures, drawData);
+          if (sfEvent) events.push(sfEvent);
+        } else if (roundName.toLowerCase().includes('final')) {
+          // Check if this is the tournament final
+          if (fixtures.length === 1) {
+            const tournamentEvent = this.createDrawTournamentCompletedEvent(fixtures[0], drawData);
+            if (tournamentEvent) events.push(tournamentEvent);
+          } else {
+            // Multiple finals (e.g., men's and women's) - just final set
+            const finalEvent = this.createDrawFinalSetEvent(fixtures, drawData);
+            if (finalEvent) events.push(finalEvent);
+          }
+        }
+      }
+    }
+    
+    return events;
+  }
+
+  /**
+   * Create enhanced tournament context from fixture context and draw data
+   * @param {Object} fixture - Fixture with _context
+   * @param {Object} drawData - Original draw data (optional)
+   * @returns {Object} Enhanced tournament context
+   */
+  createEnhancedTournamentContext(fixture, drawData = null) {
+    if (!fixture._context) return null;
+    
+    const context = fixture._context;
+    
+    // Determine tournament phase based on event type
+    const isQualifying = context.eventType === 'QS' || 
+                        context.eventDescription?.toLowerCase().includes('qualifying');
+    
+    // Extract round code from round name and modernized ID
+    const roundCode = this.getRoundCode(context.roundName, context.roundIdModernized);
+    
+    // Calculate stage number (rounds from final)
+    const stage = this.getStageFromRoundId(context.roundIdModernized);
+    
+    // Extract draw size from draw data if available
+    let drawSize = null;
+    if (drawData && drawData.Associations) {
+      for (const association of drawData.Associations) {
+        if (association.TournamentId === context.tournamentId) {
+          for (const event of association.Events) {
+            if (event.EventTypeCode === context.eventType) {
+              drawSize = event.DrawSize;
+              break;
+            }
+          }
+          if (drawSize) break;
+        }
+      }
+    }
+    
+    return {
+      tournament: {
+        id: context.tournamentId,
+        name: context.tournamentName,
+        phase: isQualifying ? 'qualifying' : 'main_draw',
+        drawSize,
+        eventType: context.eventType,
+        eventDescription: context.eventDescription
+      },
+      round: {
+        id: context.roundId,
+        name: context.roundName,
+        code: roundCode,
+        modernizedId: context.roundIdModernized,
+        stage
+      }
+    };
+  }
+  
+  /**
+   * Get standardized round code from round name and modernized ID
+   * @param {string} roundName - Round name from API
+   * @param {number} modernizedId - Modernized round ID
+   * @returns {string} Standardized round code
+   */
+  getRoundCode(roundName, modernizedId) {
+    if (!roundName) return 'R0';
+    
+    const name = roundName.toLowerCase();
+    
+    // Handle standard round names
+    if (name.includes('final') && !name.includes('semifinal')) return 'F';
+    if (name.includes('semifinal')) return 'SF';
+    if (name.includes('quarterfinal')) return 'QF';
+    if (name.includes('round of 16')) return 'R16';
+    if (name.includes('round of 32')) return 'R32';
+    if (name.includes('round of 64')) return 'R64';
+    if (name.includes('round of 128')) return 'R128';
+    
+    // Handle qualifying rounds
+    if (name.includes('qualifying')) {
+      if (name.includes('round 1') || name.includes('first round')) return 'Q1';
+      if (name.includes('round 2') || name.includes('second round')) return 'Q2';
+      if (name.includes('round 3') || name.includes('third round')) return 'Q3';
+      return 'Q';
+    }
+    
+    // Fall back to modernized ID mapping if available
+    if (modernizedId) {
+      const idToCode = {
+        8: 'F',    // Final
+        7: 'SF',   // Semifinal  
+        6: 'QF',   // Quarterfinal
+        5: 'R16',  // Round of 16
+        4: 'R32',  // Round of 32
+        3: 'R64',  // Round of 64
+        2: 'R128', // Round of 128
+        1: 'R256'  // First round (rare)
+      };
+      return idToCode[modernizedId] || `R${modernizedId}`;
+    }
+    
+    return 'R0'; // Default fallback
+  }
+  
+  /**
+   * Calculate stage number (rounds from final)
+   * @param {number} modernizedId - Modernized round ID  
+   * @returns {number} Stage number (1 = final, 2 = semifinal, etc.)
+   */
+  getStageFromRoundId(modernizedId) {
+    if (!modernizedId) return 0;
+    
+    // Modernized ID 8 = final (stage 1), 7 = semifinal (stage 2), etc.
+    return Math.max(1, 9 - modernizedId);
+  }
+
+  /**
+   * Group fixtures by round name
+   * @param {Array} fixtures - Array of fixtures
+   * @returns {Map} Map of round name to fixtures
+   */
+  groupFixturesByRound(fixtures) {
+    const rounds = new Map();
+    
+    fixtures.forEach(fixture => {
+      const roundName = fixture._context?.roundName || 'Unknown Round';
+      
+      if (!rounds.has(roundName)) {
+        rounds.set(roundName, []);
+      }
+      
+      rounds.get(roundName).push(fixture);
+    });
+    
+    return rounds;
   }
 
   /**
@@ -969,6 +1628,68 @@ class EventGeneratorService {
     }
     
     return ['Unknown Player 1', 'Unknown Player 2'];
+  }
+
+  /**
+   * Extract structured player objects from live match data (for live match events)
+   * @param {Object} match - Live match object
+   * @returns {Array} Array of player objects with {name, playerId} structure
+   */
+  extractPlayersFromMatch(match) {
+    if (!match) return [];
+    
+    const players = [];
+    
+    // Extract PlayerTeam1
+    if (match.PlayerTeam1) {
+      const team1Players = this.extractPlayerObjectsFromTeam(match.PlayerTeam1);
+      players.push(...team1Players);
+    }
+    
+    // Extract PlayerTeam2
+    if (match.PlayerTeam2) {
+      const team2Players = this.extractPlayerObjectsFromTeam(match.PlayerTeam2);
+      players.push(...team2Players);
+    }
+    
+    return players.length > 0 ? players : [];
+  }
+
+  /**
+   * Extract player objects from a team (handles both singles and doubles)
+   * @param {Object} playerTeam - PlayerTeam object from live match
+   * @returns {Array} Array of player objects
+   */
+  extractPlayerObjectsFromTeam(playerTeam) {
+    if (!playerTeam) return [];
+    
+    const players = [];
+    
+    // Main player
+    if (playerTeam.PlayerId) {
+      const firstName = playerTeam.PlayerFirstNameFull || playerTeam.PlayerFirstName || '';
+      const lastName = playerTeam.PlayerLastName || '';
+      const fullName = `${firstName} ${lastName}`.trim() || 'Unknown';
+      
+      players.push({
+        name: fullName,
+        playerId: playerTeam.PlayerId
+      });
+    }
+    
+    // Partner (for doubles)
+    if (playerTeam.PartnerId && playerTeam.PartnerFirstName && playerTeam.PartnerLastName) {
+      const partnerFirstName = playerTeam.PartnerFirstNameFull || playerTeam.PartnerFirstName || '';
+      const partnerLastName = playerTeam.PartnerLastName || '';
+      const partnerFullName = `${partnerFirstName} ${partnerLastName}`.trim() || 'Unknown';
+      
+      players.push({
+        name: partnerFullName,
+        playerId: playerTeam.PartnerId
+      });
+    }
+    
+    return players;
   }
 
   extractUmpireName(match) {
