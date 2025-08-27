@@ -146,7 +146,27 @@ function formatTable(results, colorsEnabled = true, groupByMatch = false) {
     const endDate = new Date(replayInfo.endTime).toISOString().split('T')[0];
     dateStr = startDate === endDate ? startDate : `${startDate} to ${endDate}`;
   }
-  const header = `Event Replay Results - ${dateStr} (${replayInfo.filesProcessed} log files processed)`;
+  
+  // Build header with endpoint and tournament information
+  let endpointInfo = '';
+  if (replayInfo.endpointCounts && Object.keys(replayInfo.endpointCounts).length > 1) {
+    const endpointList = Object.keys(replayInfo.endpointCounts).join(', ');
+    endpointInfo = ` [${endpointList}]`;
+  }
+  
+  // Add tournament filter to header if present
+  let tournamentInfo = '';
+  if (replayInfo.tournamentFilter) {
+    tournamentInfo = ` (Tournament: ${replayInfo.tournamentFilter})`;
+  }
+  
+  // Add exclusion info to header if present
+  let exclusionInfo = '';
+  if (replayInfo.excludedEventTypes && replayInfo.excludedEventTypes.length > 0) {
+    exclusionInfo = ` [excluding ${replayInfo.excludedEventTypes.length} types]`;
+  }
+  
+  const header = `Event Replay Results - ${dateStr}${endpointInfo}${tournamentInfo}${exclusionInfo} (${replayInfo.filesProcessed} log files processed)`;
   output.push(colorize(header, colors.bright + colors.cyan, colorsEnabled));
   output.push(colorize('='.repeat(header.length), colors.dim, colorsEnabled));
   output.push('');
@@ -220,9 +240,15 @@ function formatTable(results, colorsEnabled = true, groupByMatch = false) {
       output.push(colorize(matchSummary, colors.green, colorsEnabled));
     });
   } else {
-    // Original table format - all events in one table
-    const tableHeader = 'Date       | Time     | Event Type           | Match ID | Description';
-    const tableSeparator = '-----------|----------|----------------------|----------|---------------------------';
+    // Original table format - all events in one table, include endpoint if multiple
+    const showEndpoint = replayInfo.endpointCounts && Object.keys(replayInfo.endpointCounts).length > 1;
+    
+    const tableHeader = showEndpoint ? 
+      'Date       | Time     | Event Type           | Endpoint     | Match ID | Description' :
+      'Date       | Time     | Event Type           | Match ID | Description';
+    const tableSeparator = showEndpoint ?
+      '-----------|----------|----------------------|--------------|----------|---------------------------' :
+      '-----------|----------|----------------------|----------|---------------------------';
     
     output.push(colorize(tableHeader, colors.bright, colorsEnabled));
     output.push(colorize(tableSeparator, colors.dim, colorsEnabled));
@@ -238,6 +264,7 @@ function formatTable(results, colorsEnabled = true, groupByMatch = false) {
         'Unknown';
       
       const eventType = event.event_type.padEnd(20);
+      const endpointCol = showEndpoint ? (event.logEndpoint || 'N/A').padEnd(12) : '';
       const matchId = (event.match_id || 'N/A').padEnd(8);
       const description = event.description || 'No description';
 
@@ -248,7 +275,9 @@ function formatTable(results, colorsEnabled = true, groupByMatch = false) {
         colorsEnabled
       );
 
-      const row = `${date} | ${time} | ${coloredEventType} | ${matchId} | ${description}`;
+      const row = showEndpoint ? 
+        `${date} | ${time} | ${coloredEventType} | ${endpointCol} | ${matchId} | ${description}` :
+        `${date} | ${time} | ${coloredEventType} | ${matchId} | ${description}`;
       output.push(row);
     });
   }
@@ -287,12 +316,13 @@ function formatJson(results) {
     },
     events: results.events.map(event => {
       // Remove internal fields added during replay
-      const { logFile, logTimestamp, ...cleanEvent } = event;
+      const { logFile, logTimestamp, logEndpoint, ...cleanEvent } = event;
       return {
         ...cleanEvent,
         replay_metadata: {
           log_file: logFile,
-          log_timestamp: logTimestamp
+          log_timestamp: logTimestamp,
+          log_endpoint: logEndpoint
         }
       };
     }),
@@ -320,12 +350,33 @@ function formatSummary(results, colorsEnabled = true) {
     const endDate = new Date(replayInfo.endTime).toISOString().split('T')[0];
     dateStr = startDate === endDate ? startDate : `${startDate} to ${endDate}`;
   }
-  const header = `Event Replay Summary for ${dateStr}`;
+  
+  // Include tournament filter in header if present
+  const tournamentSuffix = replayInfo.tournamentFilter ? ` (Tournament: ${replayInfo.tournamentFilter})` : '';
+  const header = `Event Replay Summary for ${dateStr}${tournamentSuffix}`;
   output.push(colorize(header, colors.bright + colors.cyan, colorsEnabled));
   output.push(colorize('='.repeat(header.length), colors.dim, colorsEnabled));
   
   // Basic stats
   output.push(`Files processed: ${colorize(replayInfo.filesProcessed, colors.bright, colorsEnabled)} logs`);
+  
+  // Show tournament filter if present
+  if (replayInfo.tournamentFilter) {
+    output.push(`Tournament filter: ${colorize(replayInfo.tournamentFilter, colors.bright, colorsEnabled)}`);
+  }
+  
+  // Show excluded event types if present
+  if (replayInfo.excludedEventTypes && replayInfo.excludedEventTypes.length > 0) {
+    output.push(`Excluding: ${colorize(replayInfo.excludedEventTypes.join(', '), colors.yellow, colorsEnabled)}`);
+  }
+  
+  // Show endpoint breakdown if multiple endpoints
+  if (replayInfo.endpointCounts && Object.keys(replayInfo.endpointCounts).length > 1) {
+    const endpointSummary = Object.entries(replayInfo.endpointCounts)
+      .map(([endpoint, count]) => `${endpoint}: ${count}`)
+      .join(', ');
+    output.push(`Endpoints: ${endpointSummary}`);
+  }
   
   if (replayInfo.startTime && replayInfo.endTime) {
     const startTime = new Date(replayInfo.startTime).toTimeString().substring(0, 8);

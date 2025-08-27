@@ -342,7 +342,12 @@ program
   .version('1.0.0')
   .option('-d, --log-dir <path>', 'Path to log directory', './logs/api-responses')
   .option('-e, --endpoint <name>', 'Filter by endpoint')
+  .option('--endpoints <names>', 'Process multiple endpoints (comma-separated, e.g., "live-matches,draws-live")')
+  .option('--tournament-id <id>', 'Filter by tournament ID')
+  .option('--exclude-event-types <types>', 'Comma-separated list of event types to exclude (exact match required)')
   .option('--date <YYYY-MM-DD>', 'Filter by specific date (default: latest)')
+  .option('--date-start <YYYY-MM-DD>', 'Process all data on or after this date')
+  .option('--date-end <YYYY-MM-DD>', 'Process all data up to and including this date')
   .option('--start <HH:MM>', 'Start time filter')
   .option('--end <HH:MM>', 'End time filter')
   .option('-f, --format <type>', 'Output format: json, table, summary', 'table')
@@ -376,12 +381,60 @@ if (!validFormats.includes(options.format)) {
   process.exit(1);
 }
 
+// Validate endpoint options
+if (options.endpoint && options.endpoints) {
+  console.error('Error: Cannot specify both --endpoint and --endpoints. Use --endpoints for multiple endpoints.');
+  process.exit(1);
+}
+
 // Validate that --endpoint is specified when using --detect-duplicates
 if (options.detectDuplicates && !options.endpoint) {
   console.error('Error: --endpoint <name> is required when using --detect-duplicates');
   console.error('Usage: node replay-events.js --detect-duplicates --endpoint <endpoint>');
   console.error('Available endpoints: live-matches, draws-live, etc.');
   process.exit(1);
+}
+
+// Validate date range options
+if (options.date && (options.dateStart || options.dateEnd)) {
+  console.error('Error: Cannot specify --date with --date-start or --date-end. Use either single date or date range.');
+  process.exit(1);
+}
+
+// Validate date format and range logic
+const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+if (options.date && !dateRegex.test(options.date)) {
+  console.error('Error: --date must be in YYYY-MM-DD format');
+  process.exit(1);
+}
+if (options.dateStart && !dateRegex.test(options.dateStart)) {
+  console.error('Error: --date-start must be in YYYY-MM-DD format');
+  process.exit(1);
+}
+if (options.dateEnd && !dateRegex.test(options.dateEnd)) {
+  console.error('Error: --date-end must be in YYYY-MM-DD format');
+  process.exit(1);
+}
+if (options.dateStart && options.dateEnd && options.dateStart > options.dateEnd) {
+  console.error('Error: --date-start must be before or equal to --date-end');
+  process.exit(1);
+}
+
+// Parse endpoints if provided
+let endpoints = [];
+if (options.endpoints) {
+  endpoints = options.endpoints.split(',').map(e => e.trim()).filter(e => e);
+  if (endpoints.length === 0) {
+    console.error('Error: --endpoints must contain at least one endpoint name');
+    process.exit(1);
+  }
+} else if (options.endpoint) {
+  endpoints = [options.endpoint];
+}
+
+// Default to live-matches if no endpoint specified
+if (endpoints.length === 0) {
+  endpoints = ['live-matches'];
 }
 
 // Validate webhook options (except for webhook dry run mode)
@@ -420,10 +473,16 @@ if (!fs.existsSync(options.logDir)) {
 // Main execution
 async function main() {
   try {
+    // Parse excluded event types
+    const excludeEventTypes = options.excludeEventTypes ? 
+      options.excludeEventTypes.split(',').map(t => t.trim()) : null;
+    
     // Initialize replay service
     const replayer = new LogReplay({
       logDir: options.logDir,
-      endpoint: options.endpoint,
+      endpoints: endpoints,
+      tournamentId: options.tournamentId,
+      excludeEventTypes: excludeEventTypes,
       verbose: options.verbose,
       colors: options.colors
     });
@@ -431,6 +490,8 @@ async function main() {
     // Discover log files
     const files = await replayer.discoverLogFiles({
       date: options.date,
+      dateStart: options.dateStart,
+      dateEnd: options.dateEnd,
       startTime: options.start,
       endTime: options.end
     });
