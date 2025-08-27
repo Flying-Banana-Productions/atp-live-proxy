@@ -348,10 +348,6 @@ class EventGeneratorService {
           if (!event) {
             event = this.createScoreUpdateEvent(match, matchId, oldValue, newValue);
           }
-        } else if (this.isGameWin(oldValue, newValue)) {
-          event = this.createGameWonEvent(match, matchId, oldValue, newValue);
-        } else if (this.isTiebreakStart(oldValue, newValue)) {
-          event = this.createTiebreakStartedEvent(match, matchId);
         } else {
           // Regular score update
           event = this.createScoreUpdateEvent(match, matchId, oldValue, newValue);
@@ -483,41 +479,7 @@ class EventGeneratorService {
     return false;
   }
 
-  /**
-   * Detect if score change represents a game win
-   * @param {string} oldScore - Previous score
-   * @param {string} newScore - New score
-   * @returns {boolean} True if game was won
-   */
-  isGameWin(oldScore, newScore) {
-    if (typeof oldScore !== 'string' || typeof newScore !== 'string') {
-      return false;
-    }
-    
-    // Detect game score changes like "30-40" to "0-0" or "40-30" to "0-0"
-    const gameWinPattern = /\b(0-0|15-0|0-15|30-0|0-30|40-0|0-40)\b/;
-    return !gameWinPattern.test(oldScore) && gameWinPattern.test(newScore);
-  }
 
-  /**
-   * Detect tiebreak start
-   * @param {string} oldScore - Previous score
-   * @param {string} newScore - New score
-   * @returns {boolean} True if tiebreak started
-   */
-  isTiebreakStart(oldScore, newScore) {
-    if (typeof oldScore !== 'string' || typeof newScore !== 'string') {
-      return false;
-    }
-    
-    // Detect tiebreak start: score goes from "6-6" to "6-6 (1-0)" or similar
-    // But NOT from one tiebreak score to another like "6-6 (1-0)" to "6-6 (2-0)"
-    const oldHasTiebreak = oldScore.includes('(') && oldScore.includes(')');
-    const newHasTiebreak = newScore.includes('(') && newScore.includes(')');
-    
-    // Tiebreak starts if old score doesn't have tiebreak notation but new score does
-    return !oldHasTiebreak && newHasTiebreak && oldScore.includes('6-6') && newScore.includes('6-6');
-  }
 
   /**
    * Create match started event
@@ -644,35 +606,6 @@ class EventGeneratorService {
     );
   }
 
-  /**
-   * Create game won event
-   * @param {Object} match - Match object
-   * @param {string} matchId - Match ID
-   * @param {string} oldScore - Previous score
-   * @param {string} newScore - New score
-   * @returns {Object} Game won event
-   */
-  createGameWonEvent(match, matchId, oldScore, newScore) {
-    const tournamentId = this.extractTournamentId(match);
-    const playerNames = this.extractPlayerNames(match);
-    const playerObjects = this.extractPlayersFromMatch(match);
-    const description = `Game completed: ${playerNames.join(' vs ')} - ${newScore}`;
-    
-    return createEvent(
-      EVENT_TYPES.GAME_WON,
-      tournamentId,
-      matchId,
-      description,
-      {
-        players: playerObjects,
-        previousScore: oldScore,
-        currentScore: newScore,
-        tournament: this.extractTournamentName(match),
-        round: this.extractRound(match)
-      },
-      { priority: EVENT_PRIORITY.LOW }
-    );
-  }
 
   /**
    * Create court change event
@@ -819,32 +752,6 @@ class EventGeneratorService {
     );
   }
 
-  /**
-   * Create tiebreak started event
-   * @param {Object} match - Match object
-   * @param {string} matchId - Match ID
-   * @returns {Object} Tiebreak started event
-   */
-  createTiebreakStartedEvent(match, matchId) {
-    const tournamentId = this.extractTournamentId(match);
-    const playerNames = this.extractPlayerNames(match);
-    const playerObjects = this.extractPlayersFromMatch(match);
-    const description = `Tiebreak started: ${playerNames.join(' vs ')}`;
-    
-    return createEvent(
-      EVENT_TYPES.TIEBREAK_STARTED,
-      tournamentId,
-      matchId,
-      description,
-      {
-        players: playerObjects,
-        currentScore: this.extractScore(match),
-        tournament: this.extractTournamentName(match),
-        round: this.extractRound(match)
-      },
-      { priority: EVENT_PRIORITY.HIGH }
-    );
-  }
 
   /**
    * Create draw match result event (handles both normal completion and walkovers)
@@ -862,10 +769,18 @@ class EventGeneratorService {
     
     const { topPlayer, bottomPlayer } = this.extractPlayersFromFixture(fixture);
     
-    const playerNames = [
-      topPlayer?.name || 'Unknown Player',
-      bottomPlayer?.name || 'Unknown Player'
-    ];
+    // Handle both singles (object) and doubles (array)
+    const formatPlayerNames = (player) => {
+      if (Array.isArray(player)) {
+        return player.map(p => p?.name).filter(n => n).join('/');
+      }
+      return player?.name || 'Unknown Player';
+    };
+    
+    const topPlayerNames = formatPlayerNames(topPlayer);
+    const bottomPlayerNames = formatPlayerNames(bottomPlayer);
+    
+    const playerNames = [topPlayerNames, bottomPlayerNames];
     
     const winnerName = winner === 1 ? playerNames[0] : playerNames[1];
     const winnerPlayer = winner === 1 ? topPlayer : bottomPlayer;
@@ -882,6 +797,12 @@ class EventGeneratorService {
     // Get enhanced tournament context
     const enhancedContext = this.createEnhancedTournamentContext(fixture, drawData);
     
+    // Flatten players array for doubles
+    const flattenPlayers = (player) => {
+      if (Array.isArray(player)) return player;
+      return player ? [player] : [];
+    };
+    
     return createEvent(
       EVENT_TYPES.DRAW_MATCH_RESULT,
       tournamentId,
@@ -889,8 +810,8 @@ class EventGeneratorService {
       description,
       {
         resultType,  // 'completed' or 'walkover'
-        // Normalized player objects
-        players: [topPlayer, bottomPlayer].filter(p => p !== null),
+        // Normalized player objects - flatten arrays for doubles
+        players: [...flattenPlayers(topPlayer), ...flattenPlayers(bottomPlayer)].filter(p => p !== null),
         winner: winnerPlayer,
         score,
         // Enhanced tournament context
@@ -1036,61 +957,7 @@ class EventGeneratorService {
     );
   }
 
-  /**
-   * Create draw semifinal set event
-   * @param {Array} fixtures - Semifinal fixtures
-   * @returns {Object} Semifinal set event
-   */
-  createDrawSemifinalSetEvent(fixtures, drawData = null) {
-    if (!fixtures || fixtures.length === 0 || !fixtures[0]._context) return null;
-    
-    const context = fixtures[0]._context;
-    const tournamentId = context.tournamentId;
-    
-    // Extract finalist player objects
-    const finalistPlayers = fixtures.map(fixture => {
-      const winner = fixture.Winner;
-      const { topPlayer, bottomPlayer } = this.extractPlayersFromFixture(fixture);
-      return winner === 1 ? topPlayer : bottomPlayer;
-    }).filter(player => player !== null);
-    
-    // Extract names for description
-    const finalistNames = finalistPlayers.map(p => p?.name || 'Unknown');
-    
-    const description = `${context.eventDescription} final set: ${finalistNames.join(' vs ')}`;
-    
-    // Get enhanced tournament context from first fixture
-    const enhancedContext = this.createEnhancedTournamentContext(fixtures[0], drawData);
-    
-    return createEvent(
-      EVENT_TYPES.DRAW_FINAL_SET,
-      tournamentId,
-      'final-set',
-      description,
-      {
-        finalists: finalistPlayers,  // Now player objects instead of strings
-        // Enhanced tournament context
-        tournament: enhancedContext?.tournament || {
-          id: context.tournamentId,
-          name: context.tournamentName,
-          phase: 'main_draw',
-          eventType: context.eventType,
-          eventDescription: context.eventDescription
-        }
-      },
-      { priority: EVENT_PRIORITY.HIGH }
-    );
-  }
 
-  /**
-   * Create draw final set event (for when final matchup is determined)
-   * @param {Array} fixtures - Final preparation fixtures
-   * @returns {Object} Final set event
-   */
-  createDrawFinalSetEvent(fixtures, drawData = null) {
-    // This is essentially the same as semifinal set for now
-    return this.createDrawSemifinalSetEvent(fixtures, drawData);
-  }
 
   /**
    * Create draw tournament completed event
@@ -1206,18 +1073,41 @@ class EventGeneratorService {
   /**
    * Extract player information from fixture team
    * @param {Object} team - Team object (TeamTop or TeamBottom)
-   * @returns {Object} Player information
+   * @param {number} teamId - Team identifier (1 for top, 2 for bottom)
+   * @returns {Object|Array} Player information - array for doubles, single object for singles
    */
-  extractPlayerFromTeam(team) {
+  extractPlayerFromTeam(team, teamId) {
     if (!team || !team.Player) return null;
     
     const player = team.Player;
-    const formattedName = this.formatDrawPlayerName(player);
+    const isDoubles = Boolean(team.Partner);
     
-    return {
-      name: formattedName,
-      playerId: player.PlayerId || null
+    // Use first initial for doubles matches to save space
+    const playerData = this.extractPlayerDataFromDrawFields(player, isDoubles);
+    
+    const playerObj = {
+      name: playerData.fullName,
+      playerId: player.PlayerId || null,
+      teamId
     };
+    
+    // Check if this is a doubles match (has Partner)
+    if (team.Partner) {
+      const partner = team.Partner;
+      const partnerData = this.extractPlayerDataFromDrawFields(partner, isDoubles);
+      
+      const partnerObj = {
+        name: partnerData.fullName,
+        playerId: partner.PlayerId || null,
+        teamId
+      };
+      
+      // Return array of both players for doubles
+      return [playerObj, partnerObj];
+    }
+    
+    // Return single player for singles
+    return playerObj;
   }
 
   /**
@@ -1231,8 +1121,8 @@ class EventGeneratorService {
     }
     
     return {
-      topPlayer: this.extractPlayerFromTeam(fixture.Result.TeamTop),
-      bottomPlayer: this.extractPlayerFromTeam(fixture.Result.TeamBottom)
+      topPlayer: this.extractPlayerFromTeam(fixture.Result.TeamTop, 1),
+      bottomPlayer: this.extractPlayerFromTeam(fixture.Result.TeamBottom, 2)
     };
   }
 
@@ -1359,20 +1249,10 @@ class EventGeneratorService {
         const roundEvent = this.createDrawRoundCompletedEvent(roundName, fixtures, drawData);
         if (roundEvent) events.push(roundEvent);
         
-        // Check for special cases (semifinals, final)
-        if (roundName.toLowerCase().includes('semifinal')) {
-          const sfEvent = this.createDrawSemifinalSetEvent(fixtures, drawData);
-          if (sfEvent) events.push(sfEvent);
-        } else if (roundName.toLowerCase().includes('final')) {
-          // Check if this is the tournament final
-          if (fixtures.length === 1) {
-            const tournamentEvent = this.createDrawTournamentCompletedEvent(fixtures[0], drawData);
-            if (tournamentEvent) events.push(tournamentEvent);
-          } else {
-            // Multiple finals (e.g., men's and women's) - just final set
-            const finalEvent = this.createDrawFinalSetEvent(fixtures, drawData);
-            if (finalEvent) events.push(finalEvent);
-          }
+        // Check for tournament final completion
+        if (roundName.toLowerCase().includes('final') && fixtures.length === 1) {
+          const tournamentEvent = this.createDrawTournamentCompletedEvent(fixtures[0], drawData);
+          if (tournamentEvent) events.push(tournamentEvent);
         }
       }
     }
@@ -1617,13 +1497,80 @@ class EventGeneratorService {
     return match._tournamentId || null;
   }
 
+  /**
+   * Extract player data from player fields with optional first initial mode
+   * @param {Object} playerData - Player data object with name fields
+   * @param {boolean} useFirstInitial - Use PlayerFirstName (first initial) instead of PlayerFirstNameFull
+   * @returns {Object} {firstName, lastName, fullName}
+   */
+  extractPlayerDataFromFields(playerData, useFirstInitial = false) {
+    if (!playerData) return { firstName: '', lastName: '', fullName: 'Unknown' };
+    
+    const firstName = useFirstInitial ? 
+      (playerData.PlayerFirstName || '') : 
+      (playerData.PlayerFirstNameFull || playerData.PlayerFirstName || '');
+    const lastName = playerData.PlayerLastName || '';
+    const fullName = `${firstName} ${lastName}`.trim() || 'Unknown';
+    
+    return { firstName, lastName, fullName };
+  }
+
+  /**
+   * Extract partner data from team object
+   * @param {Object} playerTeam - Team object containing partner fields
+   * @returns {Object} {firstName, lastName, fullName}
+   */
+  extractPartnerData(playerTeam) {
+    if (!playerTeam || (!playerTeam.PartnerFirstName && !playerTeam.PartnerLastName)) {
+      return { firstName: '', lastName: '', fullName: '' };
+    }
+    
+    const firstName = playerTeam.PartnerFirstName || '';
+    const lastName = playerTeam.PartnerLastName || '';
+    const fullName = `${firstName} ${lastName}`.trim() || 'Unknown';
+    
+    return { firstName, lastName, fullName };
+  }
+
+  /**
+   * Extract player data from draw fixture fields with optional first initial mode
+   * @param {Object} playerData - Draw player data object with FirstName/LastName fields
+   * @param {boolean} useFirstInitial - Use first initial instead of full first name
+   * @returns {Object} {firstName, lastName, fullName}
+   */
+  extractPlayerDataFromDrawFields(playerData, useFirstInitial = false) {
+    if (!playerData) return { firstName: '', lastName: '', fullName: 'Unknown' };
+    
+    const fullFirstName = playerData.FirstName || '';
+    const firstName = useFirstInitial && fullFirstName ? `${fullFirstName.charAt(0)}.` : fullFirstName;
+    const lastName = playerData.LastName || '';
+    const fullName = `${firstName} ${lastName}`.trim() || 'Unknown';
+    
+    return { firstName, lastName, fullName };
+  }
+
   extractPlayerNames(match) {
     if (!match) return ['Unknown', 'Unknown'];
     
     // ATP API format: PlayerTeam1/PlayerTeam2 with PlayerFirstNameFull/PlayerLastName
     if (match.PlayerTeam1 && match.PlayerTeam2) {
-      const player1Name = this.formatPlayerName(match.PlayerTeam1);
-      const player2Name = this.formatPlayerName(match.PlayerTeam2);
+      // Use the shared helper functions for consistency
+      const formatPlayerTeam = (playerTeam) => {
+        if (!playerTeam) return 'Unknown';
+        
+        const playerData = this.extractPlayerDataFromFields(playerTeam, false); // Use full name for singles
+        
+        // Handle doubles - if there's a partner, show both players
+        const partnerData = this.extractPartnerData(playerTeam);
+        if (partnerData.fullName) {
+          return `${playerData.fullName}/${partnerData.fullName}`;
+        }
+        
+        return playerData.fullName;
+      };
+      
+      const player1Name = formatPlayerTeam(match.PlayerTeam1);
+      const player2Name = formatPlayerTeam(match.PlayerTeam2);
       return [player1Name, player2Name];
     }
     
@@ -1667,24 +1614,22 @@ class EventGeneratorService {
     
     // Main player
     if (playerTeam.PlayerId) {
-      const firstName = playerTeam.PlayerFirstNameFull || playerTeam.PlayerFirstName || '';
-      const lastName = playerTeam.PlayerLastName || '';
-      const fullName = `${firstName} ${lastName}`.trim() || 'Unknown';
+      // use first initial if doubles match (when partner exists)
+      const useFirstInitial = Boolean(playerTeam.PartnerId);
+      const playerData = this.extractPlayerDataFromFields(playerTeam, useFirstInitial);
       
       players.push({
-        name: fullName,
+        name: playerData.fullName,
         playerId: playerTeam.PlayerId
       });
     }
     
     // Partner (for doubles)
-    if (playerTeam.PartnerId && playerTeam.PartnerFirstName && playerTeam.PartnerLastName) {
-      const partnerFirstName = playerTeam.PartnerFirstNameFull || playerTeam.PartnerFirstName || '';
-      const partnerLastName = playerTeam.PartnerLastName || '';
-      const partnerFullName = `${partnerFirstName} ${partnerLastName}`.trim() || 'Unknown';
+    if (playerTeam.PartnerId) {
+      const partnerData = this.extractPartnerData(playerTeam);
       
       players.push({
-        name: partnerFullName,
+        name: partnerData.fullName,
         playerId: playerTeam.PartnerId
       });
     }
@@ -1692,28 +1637,7 @@ class EventGeneratorService {
     return players;
   }
 
-  extractUmpireName(match) {
-    if(!match) return 'Unknown Umpire';
-    const firstName = match.UmpireFirstName || '';
-    const lastName = match.UmpireLastName || '';
-    return `${firstName} ${lastName}`.trim() || 'Unknown';
-  }
 
-  formatPlayerName(playerTeam) {
-    if (!playerTeam) return 'Unknown';
-    
-    const firstName = playerTeam.PlayerFirstNameFull || playerTeam.PlayerFirstName || '';
-    const lastName = playerTeam.PlayerLastName || '';
-    
-    // Handle doubles - if there's a partner, show both players. Use first initial only for space (PlayerFirstName)
-    if (playerTeam.PartnerFirstName && playerTeam.PartnerLastName) {
-      const partnerName = `${playerTeam.PartnerFirstName} ${playerTeam.PartnerLastName}`.trim();
-      const mainPlayerName = `${firstName} ${lastName}`.trim();
-      return `${mainPlayerName}/${partnerName}`;
-    }
-    
-    return `${firstName} ${lastName}`.trim() || 'Unknown';
-  }
 
   extractScore(match) {
     if (!match) return '0-0';
