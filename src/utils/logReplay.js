@@ -311,6 +311,17 @@ class LogReplay {
         const fileTimestamp = logData.timestamp;
         const apiData = logData.data;
 
+        // Determine base timestamp for events
+        let baseEventTimestamp = fileTimestamp;
+        
+        // For draws-live endpoint, prefer ATP's ReleaseDateTimeUTC if available
+        if (fileEndpoint === 'draws-live' && apiData && apiData.ReleaseDateTimeUTC) {
+          baseEventTimestamp = apiData.ReleaseDateTimeUTC;
+          if (this.verbose) {
+            console.log(`[DEBUG] Using ATP ReleaseDateTimeUTC: ${baseEventTimestamp} (log timestamp was: ${fileTimestamp})`);
+          }
+        }
+
         // Set timing metadata
         if (i === 0) {
           results.replayInfo.startTime = fileTimestamp;
@@ -369,8 +380,8 @@ class LogReplay {
           }
         }
 
-        // Convert fileTimestamp to ISO format for events
-        const isoTimestamp = new Date(fileTimestamp).toISOString();
+        // Convert baseEventTimestamp to ISO format for events
+        const isoTimestamp = new Date(baseEventTimestamp).toISOString();
         const events = this.eventGenerator.processData(apiEndpoint, apiData, isoTimestamp);
         
         // Apply filters in sequence
@@ -401,10 +412,16 @@ class LogReplay {
           console.log(`[DEBUG] Generated ${filteredEvents.length} events from this file\n`);
         }
 
-        // Add events to results with file context
-        filteredEvents.forEach(event => {
+        // Add events to results with file context and microsecond offsets
+        filteredEvents.forEach((event, eventIndex) => {
+          // Add microsecond offset to ensure unique timestamps for events from same log file
+          const baseTime = new Date(event.event_timestamp);
+          const offsetTime = new Date(baseTime.getTime() + eventIndex);
+          const uniqueTimestamp = offsetTime.toISOString();
+          
           results.events.push({
             ...event,
+            event_timestamp: uniqueTimestamp, // Override with offset timestamp
             logFile: path.basename(filePath),
             logTimestamp: fileTimestamp,
             logEndpoint: fileEndpoint // Include endpoint information in events
