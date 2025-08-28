@@ -5,6 +5,7 @@ const morgan = require('morgan');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const swaggerUi = require('swagger-ui-express');
+const cron = require('node-cron');
 
 const config = require('./config');
 const apiRoutes = require('./routes/api');
@@ -184,6 +185,30 @@ async function startServer() {
 
     // Initialize WebSocket server
     webSocketServer.initialize(server);
+    
+    // Run initial API logger cleanup
+    try {
+      const apiLogger = require('./services/apiLogger');
+      const retentionDays = process.env.LOG_RETENTION_DAYS ? parseInt(process.env.LOG_RETENTION_DAYS) : 30;
+      await apiLogger.cleanup(retentionDays);
+    } catch (error) {
+      console.error('⚠️ API logger startup cleanup failed:', error.message);
+    }
+    
+    // Schedule daily API logger cleanup at 2 AM
+    cron.schedule('0 2 * * *', async () => {
+      try {
+        const apiLogger = require('./services/apiLogger');
+        const retentionDays = process.env.LOG_RETENTION_DAYS ? parseInt(process.env.LOG_RETENTION_DAYS) : 30;
+        console.log('🧹 Starting scheduled API logger cleanup...');
+        await apiLogger.cleanup(retentionDays);
+      } catch (error) {
+        console.error('⚠️ Scheduled API logger cleanup failed:', error.message);
+      }
+    }, {
+      scheduled: true,
+      timezone: "UTC"
+    });
   } catch (error) {
     console.error('❌ Failed to initialize cache service:', error.message);
     console.error('🛑 Server startup aborted');
@@ -203,6 +228,14 @@ async function shutdown() {
   
   // Stop WebSocket server
   webSocketServer.stop();
+  
+  // Flush any buffered API logger data
+  try {
+    const apiLogger = require('./services/apiLogger');
+    await apiLogger.flushBufferedData();
+  } catch (error) {
+    console.error('Error flushing API logger data:', error.message);
+  }
   
   // Disconnect cache service
   try {

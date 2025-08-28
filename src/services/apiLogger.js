@@ -197,17 +197,105 @@ class ApiLoggerService {
    * @param {number} retentionDays - Number of days to retain
    */
   async cleanup(retentionDays = 30) {
-    if (!this.isEnabled) return;
+    if (!this.isEnabled) {
+      console.log('[API LOGGER] Cleanup skipped - logging disabled');
+      return;
+    }
 
     try {
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
+      const cutoffDateStr = cutoffDate.toISOString().split('T')[0]; // YYYY-MM-DD
       
-      console.log(`[API LOGGER] Cleaning up logs older than ${cutoffDate.toISOString().split('T')[0]}`);
+      console.log(`[API LOGGER] Starting cleanup of logs older than ${cutoffDateStr}`);
+
+      // Check if base directory exists
+      let baseExists = false;
+      try {
+        await fs.access(this.baseDir);
+        baseExists = true;
+      } catch {
+        console.log(`[API LOGGER] Base directory ${this.baseDir} does not exist - nothing to clean`);
+        return;
+      }
+
+      if (!baseExists) return;
+
+      let deletedDirs = 0;
+      let deletedFiles = 0;
+      let errors = 0;
+
+      // Read all endpoint directories
+      const endpointDirs = await fs.readdir(this.baseDir);
       
-      // This is a basic implementation - could be enhanced to recursively clean directories
-      // For now, just log the intent
-      console.log('[API LOGGER] Cleanup functionality can be implemented based on specific needs');
+      for (const endpointDir of endpointDirs) {
+        const endpointPath = path.join(this.baseDir, endpointDir);
+        
+        try {
+          const stat = await fs.stat(endpointPath);
+          if (!stat.isDirectory()) continue;
+
+          // Read date directories within endpoint
+          const dateDirs = await fs.readdir(endpointPath);
+          let endpointHasRemainingDirs = false;
+
+          for (const dateDir of dateDirs) {
+            // Check if directory name matches YYYY-MM-DD format
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(dateDir)) {
+              endpointHasRemainingDirs = true;
+              continue;
+            }
+
+            const dirDate = new Date(dateDir + 'T00:00:00.000Z');
+            if (isNaN(dirDate.getTime())) {
+              console.warn(`[API LOGGER] Invalid date directory: ${dateDir}`);
+              endpointHasRemainingDirs = true;
+              continue;
+            }
+
+            if (dirDate < cutoffDate) {
+              // Directory is old enough to delete
+              const dateDirPath = path.join(endpointPath, dateDir);
+              try {
+                // Count files before deletion
+                const files = await fs.readdir(dateDirPath);
+                const fileCount = files.length;
+                
+                await fs.rm(dateDirPath, { recursive: true, force: true });
+                deletedDirs++;
+                deletedFiles += fileCount;
+                console.log(`[API LOGGER] Deleted ${dateDirPath} (${fileCount} files)`);
+              } catch (error) {
+                console.error(`[API LOGGER] Failed to delete ${dateDirPath}:`, error.message);
+                errors++;
+                endpointHasRemainingDirs = true;
+              }
+            } else {
+              endpointHasRemainingDirs = true;
+            }
+          }
+
+          // Remove endpoint directory if it's now empty
+          if (!endpointHasRemainingDirs) {
+            try {
+              const remainingContents = await fs.readdir(endpointPath);
+              if (remainingContents.length === 0) {
+                await fs.rmdir(endpointPath);
+                console.log(`[API LOGGER] Removed empty endpoint directory: ${endpointPath}`);
+              }
+            } catch (error) {
+              console.error(`[API LOGGER] Failed to remove empty endpoint directory ${endpointPath}:`, error.message);
+              errors++;
+            }
+          }
+
+        } catch (error) {
+          console.error(`[API LOGGER] Error processing endpoint directory ${endpointDir}:`, error.message);
+          errors++;
+        }
+      }
+
+      console.log(`[API LOGGER] Cleanup completed: ${deletedDirs} directories, ${deletedFiles} files deleted, ${errors} errors`);
       
     } catch (error) {
       console.error('[API LOGGER] Cleanup failed:', error.message);
