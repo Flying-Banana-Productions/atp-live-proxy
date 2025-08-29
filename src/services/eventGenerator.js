@@ -1,5 +1,6 @@
 const { diff } = require('json-diff-ts');
 const { EVENT_TYPES, EVENT_PRIORITY, createEvent } = require('../types/events');
+const { ensureUniqueTimestamps } = require('../utils/eventTimestampUtils');
 const eventOutput = require('./eventOutput');
 const config = require('../config');
 
@@ -66,12 +67,15 @@ class EventGeneratorService {
       console.error(`[EVENTS] Error processing diff for ${endpoint}:`, error.message);
     }
 
+    // Apply timestamp uniqueness to ensure proper event ordering
+    const processedEvents = ensureUniqueTimestamps(events, true);
+    
     // Output events if any were generated
-    if (events.length > 0) {
-      eventOutput.output(events);
+    if (processedEvents.length > 0) {
+      eventOutput.output(processedEvents);
     }
 
-    return events;
+    return processedEvents;
   }
 
   /**
@@ -978,7 +982,7 @@ class EventGeneratorService {
    * @param {Object} fixture - Final fixture
    * @returns {Object} Tournament completion event
    */
-  createDrawTournamentCompletedEvent(fixture, drawData = null, timestamp = null) {
+  createDrawTournamentCompletedEvent(fixture, drawData = null) {
     if (!fixture || !fixture._context || fixture.Winner === 0) return null;
     
     const tournamentId = fixture._context.tournamentId;

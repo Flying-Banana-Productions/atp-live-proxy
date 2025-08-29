@@ -1,6 +1,8 @@
-const pollingService = require('../services/pollingService');
-const eventGenerator = require('../services/eventGenerator');
-const config = require('../config');
+// Set test environment BEFORE any requires
+process.env.NODE_ENV = 'test';
+process.env.EVENTS_ENABLED = 'true';
+process.env.EVENTS_ENDPOINTS = '/api/live-matches,/api/draws/live';
+process.env.REDIS_URL = ''; // Force in-memory cache for tests
 
 // Mock ATP API to avoid real API calls
 jest.mock('../services/atpApi', () => ({
@@ -16,19 +18,20 @@ jest.mock('../services/cache', () => ({
   getTtl: jest.fn(() => 10),
 }));
 
+const pollingService = require('../services/pollingService');
+const eventGenerator = require('../services/eventGenerator');
+const config = require('../config');
 const atpApi = require('../services/atpApi');
 // const cacheService = require('../services/cache');
-
-// Set test environment
-process.env.NODE_ENV = 'test';
-process.env.EVENTS_ENABLED = 'true';
-process.env.EVENTS_ENDPOINTS = '/api/live-matches,/api/draws/live';
 
 describe('Event-Driven Polling Integration', () => {
   beforeEach(() => {
     // Clear all intervals and reset state
     pollingService.stop();
     eventGenerator.clearStates();
+    
+    // Clear config cache to ensure fresh config loading
+    delete require.cache[require.resolve('../config')];
     
     // Reset mocks
     jest.clearAllMocks();
@@ -47,10 +50,13 @@ describe('Event-Driven Polling Integration', () => {
   });
 
   describe('Event Polling Without WebSocket Subscriptions', () => {
-    it('should start polling for event endpoints when service starts', () => {
+    it('should start polling for event endpoints when service starts', async () => {
       // Start polling service without WebSocket subscriptions
       pollingService.start(null);
 
+      // Wait for first polling cycle to complete
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       const stats = pollingService.getStats();
       
       // Should be polling event endpoints
@@ -59,6 +65,7 @@ describe('Event-Driven Polling Integration', () => {
       // Check actual config values to understand the state
       console.log('Config endpoints:', config.events.endpoints);
       console.log('Event generator monitored endpoints:', Array.from(eventGenerator.monitoredEndpoints));
+      console.log('Polling stats:', stats);
       expect(stats.eventEndpoints).toEqual(expect.arrayContaining(['/api/live-matches']));
       expect(stats.activeEndpoints).toContain('/api/live-matches');
       // Only check endpoints that are actually configured
@@ -108,6 +115,9 @@ describe('Event-Driven Polling Integration', () => {
       // Start with no subscriptions
       pollingService.start(null);
       
+      // Wait for first polling cycle to complete
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       // Add a subscription (should not change event polling)
       pollingService.onSubscriptionAdded('/api/live-matches');
       
@@ -123,9 +133,12 @@ describe('Event-Driven Polling Integration', () => {
       expect(stats.activeEndpoints).toContain('/api/live-matches');
     });
 
-    it('should handle mixed polling reasons correctly', () => {
+    it('should handle mixed polling reasons correctly', async () => {
       // Start service (adds 'events' reason)
       pollingService.start(null);
+      
+      // Wait for first polling cycle to complete
+      await new Promise(resolve => setTimeout(resolve, 100));
       
       // Add subscription (adds 'subscription' reason)
       pollingService.onSubscriptionAdded('/api/live-matches');

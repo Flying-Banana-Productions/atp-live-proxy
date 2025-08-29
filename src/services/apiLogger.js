@@ -246,7 +246,7 @@ class ApiLoggerService {
               continue;
             }
 
-            const dirDate = new Date(dateDir + 'T00:00:00.000Z');
+            const dirDate = new Date(`${dateDir  }T00:00:00.000Z`);
             if (isNaN(dirDate.getTime())) {
               console.warn(`[API LOGGER] Invalid date directory: ${dateDir}`);
               endpointHasRemainingDirs = true;

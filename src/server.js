@@ -207,7 +207,7 @@ async function startServer() {
       }
     }, {
       scheduled: true,
-      timezone: "UTC"
+      timezone: 'UTC'
     });
   } catch (error) {
     console.error('❌ Failed to initialize cache service:', error.message);

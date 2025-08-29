@@ -52,7 +52,7 @@ function createEvent(eventType, tournamentId, matchId, description, data = {}, o
   return {
     event_type: eventType,
     event_timestamp: options.timestamp || new Date().toISOString(),
-    tournament_id: tournamentId.toString(),
+    tournament_id: tournamentId ? tournamentId.toString() : null,
     match_id: matchId,
     description,
     data: {

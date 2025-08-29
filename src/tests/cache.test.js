@@ -3,6 +3,7 @@ const request = require('supertest');
 // Set test environment
 process.env.NODE_ENV = 'test';
 process.env.CACHE_ENABLED = 'true'; // Enable cache for tests
+process.env.REDIS_URL = ''; // Force in-memory cache for tests
 
 const { app } = require('../server');
 const { getEndpointTtl, cacheMiddleware } = require('../middleware/cache');
@@ -47,12 +48,12 @@ describe('Cache Configuration', () => {
 
     it('should return correct TTL for draws endpoint', () => {
       const ttl = getEndpointTtl('/api/draws');
-      expect(ttl).toBe(600);
+      expect(ttl).toBe(180); // 3 minutes - results data
     });
 
     it('should return correct TTL for draws/live endpoint', () => {
       const ttl = getEndpointTtl('/api/draws/live');
-      expect(ttl).toBe(600);
+      expect(ttl).toBe(300); // 5 minutes - live draws data
     });
 
     it('should return correct TTL for schedules endpoint', () => {
@@ -89,8 +90,8 @@ describe('Cache Configuration', () => {
       expect(response.body.endpoints['/api/h2h']).toBe(10);
       expect(response.body.endpoints['/api/results']).toBe(180);
       expect(response.body.endpoints['/api/player-list']).toBe(600);
-      expect(response.body.endpoints['/api/draws']).toBe(600);
-      expect(response.body.endpoints['/api/draws/live']).toBe(600);
+      expect(response.body.endpoints['/api/draws']).toBe(180); // 3 minutes
+      expect(response.body.endpoints['/api/draws/live']).toBe(300); // 5 minutes
       expect(response.body.endpoints['/api/schedules']).toBe(600);
       expect(response.body.endpoints['/api/team-cup-rankings']).toBe(600);
     });

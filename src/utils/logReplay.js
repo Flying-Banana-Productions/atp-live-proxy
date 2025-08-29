@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { diff } = require('json-diff-ts');
+const { ensureUniqueTimestamps } = require('./eventTimestampUtils');
 const eventGeneratorInstance = require('../services/eventGenerator');
 
 /**
@@ -47,7 +48,7 @@ class LogReplay {
   async discoverLogFiles(filters = {}) {
     const { date, dateStart, dateEnd, startTime, endTime } = filters;
     
-    let allFiles = [];
+    const allFiles = [];
     
     // Process each endpoint
     for (const endpoint of this.endpoints) {
@@ -90,7 +91,7 @@ class LogReplay {
             const fullPath = path.join(dateDir, file);
             return {
               path: fullPath,
-              endpoint: endpoint,
+              endpoint,
               date: dateStr,
               timestamp: this.extractTimestamp(file),
               fullDatetime: this.extractFullDatetime(fullPath)
@@ -412,31 +413,13 @@ class LogReplay {
           console.log(`[DEBUG] Generated ${filteredEvents.length} events from this file\n`);
         }
 
-        // Sort events by logical priority before applying microsecond offsets
-        const eventPriorities = {
-          'draw_match_result': 0,        // Match completes first
-          'draw_player_advanced': 1,     // Players advance after match completion
-          'draw_round_completed': 2,     // Round completes after all advancements
-          'draw_tournament_completed': 3 // Tournament completes last
-        };
-        
-        // Sort events by priority to ensure logical ordering
-        const sortedEvents = [...filteredEvents].sort((a, b) => {
-          const priorityA = eventPriorities[a.event_type] ?? 999; // Unknown events last
-          const priorityB = eventPriorities[b.event_type] ?? 999;
-          return priorityA - priorityB;
-        });
+        // Use shared utility for timestamp uniqueness and logical ordering
+        const processedEvents = ensureUniqueTimestamps(filteredEvents, true);
 
-        // Add events to results with file context and microsecond offsets
-        sortedEvents.forEach((event, eventIndex) => {
-          // Add microsecond offset to ensure unique timestamps for events from same log file
-          const baseTime = new Date(event.event_timestamp);
-          const offsetTime = new Date(baseTime.getTime() + eventIndex);
-          const uniqueTimestamp = offsetTime.toISOString();
-          
+        // Add events to results with file context
+        processedEvents.forEach(event => {
           results.events.push({
             ...event,
-            event_timestamp: uniqueTimestamp, // Override with offset timestamp
             logFile: path.basename(filePath),
             logTimestamp: fileTimestamp,
             logEndpoint: fileEndpoint // Include endpoint information in events
