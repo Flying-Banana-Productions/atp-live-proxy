@@ -31,6 +31,9 @@ app.get('/health', (req, res) => {
 // Security middleware
 app.use(helmet());
 
+// Trust proxy configuration (must be before rate limiting)
+app.set('trust proxy', config.server.trustProxy);
+
 // CORS middleware
 const corsOptions = {
   credentials: true,

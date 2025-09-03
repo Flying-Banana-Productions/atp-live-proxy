@@ -4,6 +4,7 @@ const config = {
   server: {
     port: process.env.PORT || 3000,
     nodeEnv: process.env.NODE_ENV || 'development',
+    trustProxy: process.env.TRUST_PROXY || (process.env.NODE_ENV === 'production' ? '1' : false),
   },
   atpApi: {
     baseUrl: process.env.ATP_API_BASE_URL || 'https://api.protennislive.com/feeds',

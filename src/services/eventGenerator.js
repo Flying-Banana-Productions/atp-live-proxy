@@ -944,7 +944,7 @@ class EventGeneratorService {
       return winner === 1 ? topPlayer : bottomPlayer;
     }).filter(player => player !== null);
     
-    const description = `${roundName} completed in ${context.eventDescription} - ${winnerPlayers.length} winners advance`;
+    const description = `${roundName} completed in ${context.eventDescription}`;
     
     // Get enhanced tournament context from first fixture
     const enhancedContext = this.createEnhancedTournamentContext(fixtures[0], drawData);
