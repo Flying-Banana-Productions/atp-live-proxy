@@ -1,6 +1,9 @@
 # Production build for ATP Live Proxy
 FROM node:22-alpine
 
+# Upgrade NPM
+RUN npm install -g npm@11.6.0
+
 # Set working directory
 WORKDIR /app
 

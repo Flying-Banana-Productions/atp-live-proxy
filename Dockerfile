@@ -1,6 +1,9 @@
 # Use Node.js LTS Alpine image for smaller size and security
 FROM node:22-alpine
 
+# Upgrade NPM
+RUN npm install -g npm@11.6.0
+
 # Set working directory
 WORKDIR /app
 
