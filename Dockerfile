@@ -1,5 +1,5 @@
 # Use Node.js LTS Alpine image for smaller size and security
-FROM node:18-alpine
+FROM node:22-alpine
 
 # Set working directory
 WORKDIR /app
