@@ -410,6 +410,99 @@ router.get('/schedules', cacheMiddleware(), async (req, res, next) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/schedules/date/{date}:
+ *   get:
+ *     summary: Get tournament schedule for a specific date
+ *     description: Get tournament schedule filtered by ISO date (YYYY-MM-DD). Requires Tournament Claims.
+ *     tags: [Schedules]
+ *     parameters:
+ *       - in: path
+ *         name: date
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: ISO date in YYYY-MM-DD format
+ *         example: "2025-10-19"
+ *     responses:
+ *       200:
+ *         description: Schedule for specified date retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/CacheResponse'
+ *       400:
+ *         description: Invalid date format
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       401:
+ *         description: Not authorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       403:
+ *         description: Access forbidden (missing claims)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: No schedule found for specified date
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.get('/schedules/date/:date', cacheMiddleware(), async (req, res, next) => {
+  try {
+    const { date } = req.params;
+
+    // Validate ISO date format (YYYY-MM-DD)
+    const isoDateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!isoDateRegex.test(date)) {
+      return res.status(400).json({
+        error: 'Invalid date format',
+        message: 'Date must be in ISO format (YYYY-MM-DD)',
+        example: '2025-10-19',
+      });
+    }
+
+    // Validate that it's a valid date
+    const dateObj = new Date(date);
+    if (isNaN(dateObj.getTime())) {
+      return res.status(400).json({
+        error: 'Invalid date',
+        message: 'The provided date is not a valid calendar date',
+      });
+    }
+
+    // Fetch full schedule from ATP API
+    const fullSchedule = await atpApi.getSchedule(req.query);
+
+    // Filter DailySchedule array by IsoDate field
+    if (fullSchedule && fullSchedule.DailySchedule && Array.isArray(fullSchedule.DailySchedule)) {
+      const filteredSchedule = fullSchedule.DailySchedule.filter(
+        day => day.IsoDate === date
+      );
+
+      res.json({
+        ...fullSchedule,
+        DailySchedule: filteredSchedule
+      });
+    } else {
+      // Fallback: return original response if structure is unexpected
+      res.json(fullSchedule);
+    }
+  } catch (error) {
+    next(error);
+  }
+});
+
 // ===== TEAM CUP RANKINGS ENDPOINTS =====
 
 /**
@@ -610,6 +703,7 @@ router.get('/info', (req, res) => {
       playerList: '/api/player-list',
       results: '/api/results',
       schedules: '/api/schedules',
+      schedulesByDate: '/api/schedules/date/:date',
       teamCupRankings: '/api/team-cup-rankings',
       health: '/api/health',
       cacheStats: '/api/cache/stats',

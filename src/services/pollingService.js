@@ -295,7 +295,7 @@ class PollingService {
       '/api/match-stats': () => atpApi.getMatchStats(), // This needs matchId parameter
       '/api/player-list': () => atpApi.getPlayerList(),
       '/api/results': () => atpApi.getResults(),
-      '/api/schedules': () => atpApi.getSchedules(),
+      '/api/schedules': () => atpApi.getSchedule(),
       '/api/team-cup-rankings': () => atpApi.getTeamCupRankings(),
     };
 

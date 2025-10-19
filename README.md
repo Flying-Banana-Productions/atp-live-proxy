@@ -148,7 +148,8 @@ Visit `http://localhost:3000/api-docs` in your browser to access the interactive
 
 | Endpoint | Method | Description | Cache TTL |
 |----------|--------|-------------|-----------|
-| `/api/schedules` | GET | Get tournament schedule | 10 minutes |
+| `/api/schedules` | GET | Get tournament schedule (all dates) | 10 minutes |
+| `/api/schedules/date/:date` | GET | Get tournament schedule for a specific date (YYYY-MM-DD) | 10 minutes |
 
 #### Team Cup Rankings Endpoints
 
@@ -208,7 +209,11 @@ curl http://localhost:3000/api/results
 
 ### Get Tournament Schedule
 ```bash
+# Get schedule for all dates
 curl http://localhost:3000/api/schedules
+
+# Get schedule for a specific date
+curl http://localhost:3000/api/schedules/date/2025-10-19
 ```
 
 ### Get Team Cup Rankings
