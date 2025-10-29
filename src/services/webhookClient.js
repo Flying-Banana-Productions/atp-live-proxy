@@ -1,5 +1,7 @@
 const axios = require('axios');
 const crypto = require('crypto');
+const http = require('http');
+const https = require('https');
 const config = require('../config');
 
 /**
@@ -96,7 +98,10 @@ class WebhookClientService {
         const response = await axios.post(this.webhookUrl, payload, {
           headers,
           timeout: this.timeout,
-          validateStatus: (status) => status >= 200 && status < 300
+          validateStatus: (status) => status >= 200 && status < 300,
+          // Disable keep-alive to prevent connection pooling (especially in tests)
+          httpAgent: new http.Agent({ keepAlive: false }),
+          httpsAgent: new https.Agent({ keepAlive: false })
         });
 
         console.log(`[WEBHOOK] Successfully sent ${events.length} event(s) to ${this.webhookUrl} (${response.status})`);
@@ -144,6 +149,12 @@ class WebhookClientService {
 
     const eventArray = Array.isArray(events) ? events : [events];
     this.eventQueue.push(...eventArray);
+
+    // In test environment, flush immediately to avoid timers
+    if (process.env.NODE_ENV === 'test') {
+      this.flushQueue();
+      return;
+    }
 
     // If we've reached the batch size, send immediately
     if (this.eventQueue.length >= this.batchSize) {
