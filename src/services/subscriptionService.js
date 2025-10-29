@@ -9,6 +9,18 @@ class SubscriptionService {
     this.subscriptions = new Map();
     // socketId -> Set of endpoints
     this.socketSubscriptions = new Map();
+    // Silent mode for tests
+    this.silent = process.env.NODE_ENV === 'test';
+  }
+
+  /**
+   * Log message unless in silent mode
+   * @param {string} message - Message to log
+   */
+  log(message) {
+    if (!this.silent) {
+      console.log(message);
+    }
   }
 
   /**
@@ -29,7 +41,7 @@ class SubscriptionService {
     }
     this.socketSubscriptions.get(socketId).add(endpoint);
 
-    console.log(`[SUBSCRIPTION] Socket ${socketId} subscribed to ${endpoint}`);
+    this.log(`[SUBSCRIPTION] Socket ${socketId} subscribed to ${endpoint}`);
   }
 
   /**
@@ -56,7 +68,7 @@ class SubscriptionService {
       }
     }
 
-    console.log(`[SUBSCRIPTION] Socket ${socketId} unsubscribed from ${endpoint}`);
+    this.log(`[SUBSCRIPTION] Socket ${socketId} unsubscribed from ${endpoint}`);
   }
 
   /**
@@ -97,7 +109,7 @@ class SubscriptionService {
       this.socketSubscriptions.delete(socketId);
     }
 
-    console.log(`[SUBSCRIPTION] Removed all subscriptions for socket ${socketId}`);
+    this.log(`[SUBSCRIPTION] Removed all subscriptions for socket ${socketId}`);
   }
 
   /**
@@ -122,7 +134,7 @@ class SubscriptionService {
   clear() {
     this.subscriptions.clear();
     this.socketSubscriptions.clear();
-    console.log('[SUBSCRIPTION] Cleared all subscriptions');
+    this.log('[SUBSCRIPTION] Cleared all subscriptions');
   }
 }
 

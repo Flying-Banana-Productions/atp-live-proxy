@@ -487,7 +487,7 @@ router.get('/schedules/date/:date', cacheMiddleware(), async (req, res, next) =>
     // Filter DailySchedule array by IsoDate field
     if (fullSchedule && fullSchedule.DailySchedule && Array.isArray(fullSchedule.DailySchedule)) {
       const filteredSchedule = fullSchedule.DailySchedule.filter(
-        day => day.IsoDate === date
+        day => day.IsoDate?.split('T')[0] === date
       );
 
       res.json({

@@ -75,11 +75,13 @@ app.use(cors(corsOptions));
 // Compression middleware
 app.use(compression());
 
-// Logging middleware
-if (config.server.nodeEnv === 'development') {
-  app.use(morgan('dev'));
-} else {
-  app.use(morgan('combined'));
+// Logging middleware (disabled during tests)
+if (config.server.nodeEnv !== 'test') {
+  if (config.server.nodeEnv === 'development') {
+    app.use(morgan('dev'));
+  } else {
+    app.use(morgan('combined'));
+  }
 }
 
 // Rate limiting

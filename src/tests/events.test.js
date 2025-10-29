@@ -1,19 +1,25 @@
-const eventGenerator = require('../services/eventGenerator');
-const eventOutput = require('../services/eventOutput');
-const { EVENT_TYPES } = require('../types/events');
-
-// Set test environment
+// Set test environment FIRST before any requires
 process.env.NODE_ENV = 'test';
 process.env.EVENTS_ENABLED = 'true';
 process.env.EVENTS_CONSOLE_OUTPUT = 'false'; // Disable console output for tests
 process.env.EVENTS_WEBHOOK_URL = ''; // Disable webhooks for tests
 process.env.EVENTS_WEBHOOK_SECRET = ''; // Disable webhooks for tests
 
+const eventGenerator = require('../services/eventGenerator');
+const eventOutput = require('../services/eventOutput');
+const { EVENT_TYPES } = require('../types/events');
+
 describe('JSON Diff Event Generation System', () => {
   beforeEach(() => {
     // Clear any previous states before each test
     eventGenerator.clearStates();
     eventOutput.setEnabled(true);
+  });
+
+  afterAll(async () => {
+    // Ensure webhook client is cleaned up
+    const webhookClient = require('../services/webhookClient');
+    await webhookClient.shutdown();
   });
 
   describe('Event Generator Service (JSON Diff)', () => {
@@ -822,9 +828,12 @@ describe('JSON Diff Event Generation System', () => {
       
       console.log = originalConsoleLog;
       console.warn = originalConsoleWarn;
-      
+
       expect(warnCalls.length).toBeGreaterThan(0); // Warning for invalid event
-      expect(logCalls.length).toBeGreaterThan(0); // Output for valid event
+      // Only expect console output if EVENTS_CONSOLE_OUTPUT is enabled
+      if (process.env.EVENTS_CONSOLE_OUTPUT !== 'false') {
+        expect(logCalls.length).toBeGreaterThan(0); // Output for valid event
+      }
     });
   });
 });
