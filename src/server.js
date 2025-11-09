@@ -185,11 +185,20 @@ async function startServer() {
       console.log(`💚 Health Check: http://localhost:${PORT}/api/health`);
       console.log(`📖 Swagger Docs: http://localhost:${PORT}/api-docs`);
       console.log(`⚙️  Cache Config: http://localhost:${PORT}/api/cache/config`);
-      console.log(`🔌 WebSocket: ws://localhost:${PORT}`);
+
+      if (config.websocket.enabled) {
+        console.log(`🔌 WebSocket: ws://localhost:${PORT}`);
+      } else {
+        console.log('🔌 WebSocket: Disabled');
+      }
     });
 
-    // Initialize WebSocket server
-    webSocketServer.initialize(server);
+    // Initialize WebSocket server if enabled
+    if (config.websocket.enabled) {
+      webSocketServer.initialize(server);
+    } else {
+      console.log('🔌 WebSocket server disabled (WEBSOCKET_ENABLED=false)');
+    }
     
     // Run initial API logger cleanup
     try {

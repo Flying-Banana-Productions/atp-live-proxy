@@ -2,6 +2,7 @@ const config = require('../config');
 const RedisCache = require('./redisCache');
 const MemoryCache = require('./memoryCache');
 const NoOpCache = require('./noOpCache');
+const FilesystemCache = require('./filesystemCache');
 
 /**
  * Cache factory that creates the appropriate cache provider based on configuration
@@ -14,6 +15,7 @@ class CacheFactory {
   static async createCache() {
     const cacheEnabled = config.cache.enabled;
     const redisUrl = config.redis.url;
+    const filesystemCacheDir = config.filesystem?.cacheDir;
 
     // If caching is disabled, use no-op cache
     if (!cacheEnabled) {
@@ -21,6 +23,21 @@ class CacheFactory {
       const cache = new NoOpCache();
       await cache.initialize();
       return cache;
+    }
+
+    // If filesystem cache directory is configured, use filesystem cache
+    if (filesystemCacheDir) {
+      console.log('[CACHE FACTORY] Filesystem cache directory configured, initializing filesystem cache');
+      try {
+        const cache = new FilesystemCache();
+        await cache.initialize();
+        console.log('[CACHE FACTORY] Filesystem cache initialized successfully (read-only)');
+        return cache;
+      } catch (error) {
+        console.error('[CACHE FACTORY] Filesystem cache initialization failed:', error.message);
+        console.error('[CACHE FACTORY] This is a catastrophic failure - exiting process');
+        process.exit(1);
+      }
     }
 
     // If Redis URL is configured, use Redis cache
@@ -53,12 +70,22 @@ class CacheFactory {
   static getCacheStrategy() {
     const cacheEnabled = config.cache.enabled;
     const redisUrl = config.redis.url;
+    const filesystemCacheDir = config.filesystem?.cacheDir;
 
     if (!cacheEnabled) {
       return {
         type: 'noop',
         enabled: false,
         description: 'Caching disabled'
+      };
+    }
+
+    if (filesystemCacheDir) {
+      return {
+        type: 'filesystem',
+        enabled: true,
+        cacheDir: filesystemCacheDir,
+        description: 'Read-only filesystem cache for frozen snapshots'
       };
     }
 
