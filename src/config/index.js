@@ -21,18 +21,24 @@ const config = {
       '/api/match-stats': 10,
       '/api/h2h/match': 10,
       '/api/h2h': 10, // H2H by player IDs
-      
+
       // Results - medium cache time
       '/api/results': 180, // 3 minutes
       '/api/draws': 180, // 3 minutes
       '/api/draws/live': 300, // 5 minutes
-      
+
       // Static data - long cache times
       '/api/player-list': 600, // 10 minutes
       '/api/schedules': 600, // 10 minutes
       '/api/team-cup-rankings': 600, // 10 minutes
       '/api/tournaments': 3600, // 1 hour (tournament info changes rarely)
     },
+  },
+  filesystem: {
+    cacheDir: process.env.FILESYSTEM_CACHE_DIR, // Path to filesystem cache directory for read-only frozen snapshots
+  },
+  websocket: {
+    enabled: process.env.WEBSOCKET_ENABLED !== 'false', // Default to enabled, set to 'false' to disable
   },
   rateLimit: {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes

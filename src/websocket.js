@@ -89,12 +89,12 @@ class WebSocketServer {
    */
   handleSubscribe(socket, endpoints) {
     const endpointList = Array.isArray(endpoints) ? endpoints : [endpoints];
-    
+
     for (const endpoint of endpointList) {
       if (this.isValidEndpoint(endpoint)) {
         subscriptionService.subscribe(socket.id, endpoint);
         pollingService.onSubscriptionAdded(endpoint);
-        
+
         // Send confirmation
         socket.emit('subscribed', {
           endpoint,
