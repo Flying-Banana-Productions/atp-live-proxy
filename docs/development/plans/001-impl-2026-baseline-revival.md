@@ -2,7 +2,7 @@
 
 **Version:** 1.0
 **Created:** October 5, 2026
-**Status:** In Progress
+**Status:** Complete (ops items open)
 
 ## Overview
 
@@ -47,18 +47,28 @@ atp-live-proxy has been dormant since the Nov 2025 Knoxville Challenger and must
 
 **Completion gate:** No 2025-specific hardcodes in runtime config (or each one fixed/documented); freeze mode verified OFF by default and documented; `/health` and `/api/health` confirmed; every `process.env.*` the code reads is documented in `env.example`; bounded local server smoke passes (`/health`, `/api/info`); `npm test` and `npm run lint` green.
 
-- [ ] Review `src/config` and services for 2025-specific tournament IDs, years, dates
-- [ ] Freeze mode / filesystem cache (PR #2): confirm OFF by default so 2026 live data flows; document in `env.example` / README
-- [ ] Confirm `/health` and `/api/health` endpoints exist and respond
-- [ ] `env.example` documents every env var read via `process.env`
-- [ ] Bounded server smoke: start locally (Redis disabled or throwaway `redis:7-alpine`), curl `/health` and `/api/info`, stop
-- [ ] Tests added for any behavior change
+- [x] Review `src/config` and services for 2025-specific tournament IDs, years, dates
+- [x] Freeze mode / filesystem cache (PR #2): confirm OFF by default so 2026 live data flows; document in `env.example` / README
+- [x] Confirm `/health` and `/api/health` endpoints exist and respond
+- [x] `env.example` documents every env var read via `process.env`
+- [x] Bounded server smoke: start locally (Redis disabled or throwaway `redis:7-alpine`), curl `/health` and `/api/info`, stop
+- [x] Tests added for any behavior change
+
+**Gate evidence (2026-10-05, Node v22.23.2):**
+
+- **2025 hardcodes:** none in runtime code. There are no tournament IDs, years or dates in `src/config`; the tournament is selected entirely by the tournament-scoped `ATP_BEARER_TOKEN`. The only `2025` strings are a Swagger/400-response example date (`2025-10-19`) in `src/routes/api.js` and a path comment in `src/utils/outputFormatters.js`; left as-is (illustrative only).
+- **Freeze mode (PR #2):** the write-once filesystem cache is selected only when `FILESYSTEM_CACHE_DIR` is set; it is unset by default, and `WEBSOCKET_ENABLED` / `EVENTS_ENABLED` default to `true`, so live data flows out of the box. Risk: the filesystem cache has infinite TTL, so if the Nov 2025 freeze variables are still set in Railway, a 2026 deploy would serve the first response it fetched, forever. Mitigations added: startup `FREEZE MODE ACTIVE` warning; `/api/health` now reports `freezeMode`, `cache.provider`, a warning, and downgrades `healthy` → `warning`; freeze mode documented in `env.example` and README.
+- **Health:** `/health` (liveness, before the rate limiter) and `/api/health` (rich status) both respond 200. Note: `/api/health` returns HTTP 200 even when `status` is `critical` (e.g. bearer token missing), so the Docker `HEALTHCHECK` stays green without a token. Left unchanged.
+- **env.example:** was missing `TRUST_PROXY`, `POLLING_BACKOFF_ENABLED`, `POLLING_BACKOFF_MULTIPLIER`, `POLLING_BACKOFF_MAX_MULTIPLIER`, `POLLING_BACKOFF_RESET_ON_SUCCESS`, `API_LOG_MIN_INTERVAL`; all added. A new test fails if `src/` reads an undocumented `process.env` variable.
+- **Retention default:** `LOG_RETENTION_DAYS` defaulted to 7 in `src/config` but 30 in `server.js` (the value actually used) and `env.example`; `server.js` now reads `config.apiLogging.retentionDays`, and the config default is 30. Effective behavior is unchanged.
+- **Tests:** new `src/tests/readiness.test.js` (7 tests): freeze off by default, filesystem cache only selected when the dir is set, retention default, `/health`, `/api/health` freeze reporting (on/off), env.example coverage. `npm test`: 8 suites, 81 passed / 3 skipped; `npm run lint` green.
+- **Smoke:** `NODE_ENV=production node src/server.js` with no bearer token and `ATP_API_BASE_URL=http://127.0.0.1:9` (so nothing reaches the network); (a) with a throwaway `redis:7-alpine` on :56379, (b) with the in-memory cache. Both: `/health` 200, `/api/info` 200, `/api/health` `{status: critical, freezeMode: false, provider: redis|memory, warnings: [ATP_BEARER_TOKEN is not configured]}`, and a clean SIGTERM shutdown. (c) With `FILESYSTEM_CACHE_DIR` set, the startup warning was logged and `/api/health` reported `freezeMode: true`.
 
 ### Ops checklist (owner-provided, no code)
 
-- [ ] Obtain the 2026 ATP API bearer token (`ATP_BEARER_TOKEN`) from the tournament/ATP contact and set it in Railway
-- [ ] Confirm the 2026 tournament ID / year values in Railway env match the 2026 event
-- [ ] Confirm freeze mode is not enabled in the Railway environment for 2026
+- [ ] Obtain the 2026 ATP API bearer token (`ATP_BEARER_TOKEN`, tournament-scoped) from the tournament/ATP contact and set it in Railway; verify `/api/health` shows `authentication.configured: true` and no critical warnings
+- [ ] Confirm the Nov 2025 freeze is cleared in Railway: `FILESYSTEM_CACHE_DIR` unset, `WEBSOCKET_ENABLED` and `EVENTS_ENABLED` not `false`; verify that `/api/health` reports `freezeMode: false` after deploy
+- [ ] Confirm `ALLOWED_ORIGINS`, `EVENTS_WEBHOOK_URL` and `EVENTS_WEBHOOK_SECRET` in Railway match the 2026 maple/walnut deployments (maple rotated its webhook secrets for 2026)
 
 ## Not In Scope (post-tournament)
 

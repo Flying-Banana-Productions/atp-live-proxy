@@ -76,9 +76,17 @@ const options = {
               type: 'string',
               example: '1.0.0',
             },
+            freezeMode: {
+              type: 'boolean',
+              description: 'True when the write-once filesystem cache (FILESYSTEM_CACHE_DIR) is active and live data will not update',
+            },
             cache: {
               type: 'object',
               properties: {
+                provider: {
+                  type: 'string',
+                  description: 'Active cache provider (memory, redis, filesystem, noop)',
+                },
                 ttl: {
                   type: 'integer',
                   description: 'Cache time-to-live in seconds',

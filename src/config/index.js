@@ -75,7 +75,7 @@ const config = {
     enabled: process.env.ENABLE_API_LOGGING === 'true', // Disabled by default for security
     baseDir: process.env.API_LOG_DIR || './logs/api-responses',
     logAllEndpoints: process.env.LOG_ALL_ENDPOINTS === 'true', // vs just event endpoints
-    retentionDays: parseInt(process.env.LOG_RETENTION_DAYS) || 7,
+    retentionDays: parseInt(process.env.LOG_RETENTION_DAYS) || 30, // matches apiLogger.cleanup() default
     minInterval: parseInt(process.env.API_LOG_MIN_INTERVAL) || 60, // seconds between writes per endpoint
   },
 };

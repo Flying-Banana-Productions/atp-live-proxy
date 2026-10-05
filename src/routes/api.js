@@ -631,6 +631,17 @@ router.get('/health', async (req, res) => {
     warnings.push('Large number of cache keys');
   }
   
+  // Freeze mode: the write-once filesystem cache (FILESYSTEM_CACHE_DIR) serves
+  // frozen snapshots forever, so live tournament data will not update.
+  const cacheProvider = cacheService.getProviderType();
+  const freezeMode = cacheProvider === 'filesystem';
+  if (freezeMode) {
+    if (status === 'healthy') {
+      status = 'warning';
+    }
+    warnings.push('Freeze mode active (FILESYSTEM_CACHE_DIR is set): serving frozen snapshots, live data will not update');
+  }
+
   // Check authentication configuration
   const hasBearerToken = !!config.atpApi.bearerToken;
   if (!hasBearerToken) {
@@ -647,7 +658,9 @@ router.get('/health', async (req, res) => {
       configured: hasBearerToken,
       baseUrl: config.atpApi.baseUrl,
     },
+    freezeMode,
     cache: {
+      provider: cacheProvider,
       ttl: config.cache.ttl,
       checkPeriod: config.cache.checkPeriod,
       keys: totalKeys,

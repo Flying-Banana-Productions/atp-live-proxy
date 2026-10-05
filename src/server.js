@@ -178,6 +178,9 @@ async function startServer() {
       console.log(`📊 Environment: ${config.server.nodeEnv}`);
       console.log(`🔗 API Base URL: ${config.atpApi.baseUrl}`);
       console.log(`🗄️  Cache Strategy: ${cacheService.getProviderType()}`);
+      if (cacheService.getProviderType() === 'filesystem') {
+        console.warn('⚠️  FREEZE MODE ACTIVE: FILESYSTEM_CACHE_DIR is set; responses are write-once frozen snapshots and live data will NOT update. Unset FILESYSTEM_CACHE_DIR for live tournament operation.');
+      }
       console.log(`⏱️  Cache TTL: ${config.cache.ttl} seconds (default)`);
       console.log(`📈 Rate Limit: ${config.rateLimit.maxRequests} requests per ${config.rateLimit.windowMs / 1000 / 60} minutes`);
       console.log(`🌐 Server URL: http://localhost:${PORT}`);
@@ -203,7 +206,7 @@ async function startServer() {
     // Run initial API logger cleanup
     try {
       const apiLogger = require('./services/apiLogger');
-      const retentionDays = process.env.LOG_RETENTION_DAYS ? parseInt(process.env.LOG_RETENTION_DAYS) : 30;
+      const retentionDays = config.apiLogging.retentionDays;
       await apiLogger.cleanup(retentionDays);
     } catch (error) {
       console.error('⚠️ API logger startup cleanup failed:', error.message);
@@ -213,7 +216,7 @@ async function startServer() {
     cron.schedule('0 2 * * *', async () => {
       try {
         const apiLogger = require('./services/apiLogger');
-        const retentionDays = process.env.LOG_RETENTION_DAYS ? parseInt(process.env.LOG_RETENTION_DAYS) : 30;
+        const retentionDays = config.apiLogging.retentionDays;
         console.log('🧹 Starting scheduled API logger cleanup...');
         await apiLogger.cleanup(retentionDays);
       } catch (error) {
