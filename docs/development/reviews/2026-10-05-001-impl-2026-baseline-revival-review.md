@@ -124,3 +124,41 @@ Optionally, `freezeMode` could be defined as `filesystem || !websocket || !event
 - [ ] 2026 `ATP_BEARER_TOKEN` in Railway
 - [ ] Freeze cleared in Railway (all three variables, verified through the extended health output from P1.1)
 - [ ] `ALLOWED_ORIGINS`, `EVENTS_WEBHOOK_URL`, `EVENTS_WEBHOOK_SECRET` match the 2026 maple/walnut deployments
+
+## Addendum — re-review (2026-10-05)
+
+**Commit reviewed:** `4481a8f` (on top of `be0b022`)
+**Local verification:** Node v22.23.2:
+- `npm ci` OK
+- `npm run lint` exit 0
+- `npm test`: 8 suites, 96 passed / 3 skipped
+- `readiness.test.js` with a temporary `.env` that sets `FILESYSTEM_CACHE_DIR`, `CACHE_ENABLED=false` and `WEBSOCKET_ENABLED=false`: 22/22 passed (`.env` removed afterwards)
+- Production smoke (`NODE_ENV=production`, unreachable upstream) in three configs:
+  - All switches on with webhook URL and secret: `/health` 200; `/api/health` `healthy`, `realtime` all `true`, `warnings: []`, no `REALTIME DEGRADED` lines.
+  - `WEBSOCKET_ENABLED=false EVENTS_ENABLED=false`: `warning`, both realtime warnings, two startup `REALTIME DEGRADED` lines.
+  - Webhook URL without secret: `warning`, `webhookConfigured: false`, one webhook warning.
+- GitHub Actions: Test Suite (push, run 37336693835) and both PR workflows (37336794053 and 37336793911) green on `4481a8f`.
+
+### What's Addressed
+
+- **P1.1 — closed.**
+  - `src/utils/realtimeStatus.js` derives `websocket` / `events` / `webhookConfigured`. `webhookConfigured` requires both URL and secret, which matches `webhookClient.isEnabled` (`src/services/webhookClient.js:15`).
+  - `/api/health` exposes `realtime`, appends the warnings and downgrades `healthy` → `warning`.
+  - Startup logs `REALTIME DEGRADED`.
+  - Tests toggle each switch through the live `config` object and verify the response field, the warning and a non-healthy status.
+  - Ops checklist item 2 now verifies `realtime.*` and an empty `warnings` array.
+- **P2.1 — closed.** `no-extra-semi` and `no-mixed-spaces-and-tabs` are re-added. The remaining drift (`no-inner-declarations`, the renamed and added rules, `ecmaVersion`, unused-directive reporting) is recorded accurately in the plan.
+- **P2.2 — closed.** The dead codecov step is removed from `test.yml`.
+- **P2.3 — closed.** The env.example matcher is now `^#?[ \t]*NAME=`, and the source scan also catches `process.env['X']`.
+- **P2.4 — closed.** `jest.mock('dotenv')` is hoisted for the whole suite (it also covers the `isolateModules` loads) and `FILESYSTEM_CACHE_DIR=''` is pinned. Verified with a hostile `.env`.
+- **P2.5 — closed.** `parseRetentionDays` honours `0`, falls back to 30 for unset, non-numeric or negative values, and is covered by `it.each`. `env.example` documents it.
+- **P2.6 — closed.** `railway.toml` `[deploy] healthcheckPath = "/health"`, `healthcheckTimeout = 60`. The `/health` route is registered before helmet, CORS and the rate limiter, and only responds once `app.listen` runs after cache init, so a Redis failure (`process.exit(1)`) now fails the deploy instead of taking traffic. The Docker `HEALTHCHECK` now targets `/health`.
+- **P2.7 — closed.** `scheduled: true` is removed. The plan records that a node-cron 4.6 task still fires without it.
+- **P2.8 — closed.** The Swagger `status` enum and the `realtime` object are documented.
+
+### Remaining Concerns
+
+- None blocking. One nit, P2, pre-existing and not introduced here: the `Dockerfile.production` `HEALTHCHECK` hardcodes port `3000`, while the app listens on `$PORT`. This is harmless on Railway, which ignores Docker `HEALTHCHECK` and uses `healthcheckPath`, but it would mark the container unhealthy anywhere else that sets a different `PORT`. Fix when next touched: use `curl -f http://localhost:${PORT:-3000}/health`.
+- Ops items (bearer token, freeze cleared in Railway, origins/webhook secrets, Railway healthcheck observed in the deploy log) remain owner actions, as the plan states.
+
+**Readiness:** Ready — all P1/P2 findings closed and verified; only owner ops items remain before the Nov 2026 tournament.
