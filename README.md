@@ -20,7 +20,7 @@ A Node.js proxy server with Express for the ATP (Association of Tennis Professio
 
 ## Prerequisites
 
-- Node.js 16.0.0 or higher
+- Node.js 22 (LTS) or higher (see `.nvmrc`)
 - npm or yarn package manager
 - ATP API Bearer token (unique for each tournament)
 
