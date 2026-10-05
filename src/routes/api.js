@@ -4,6 +4,7 @@ const cacheService = require('../services/cache');
 const { cacheMiddleware } = require('../middleware/cache');
 const config = require('../config');
 const { getRealtimeStatus } = require('../utils/realtimeStatus');
+const { getHeapUsedPercent } = require('../utils/heapUsage');
 
 const router = express.Router();
 
@@ -610,8 +611,7 @@ router.get('/tournaments/:tournamentYear/:tournamentId', cacheMiddleware(), asyn
  */
 router.get('/health', async (req, res) => {
   const cacheStats = await cacheService.getStats();
-  const memUsage = process.memoryUsage();
-  const heapUsedPercent = (memUsage.heapUsed / memUsage.heapTotal) * 100;
+  const heapUsedPercent = getHeapUsedPercent();
   
   // Calculate total keys from both memory and Redis
   const totalKeys = (cacheStats.memory?.keys || 0) + (cacheStats.redis?.keys || 0);

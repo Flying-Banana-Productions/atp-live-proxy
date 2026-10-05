@@ -101,3 +101,7 @@ atp-live-proxy has been dormant since the Nov 2025 Knoxville Challenger and must
 |---------|------|---------|
 | 1.0 | 2026-10-05 | Initial plan |
 | 1.1 | 2026-10-05 | Addressed review `docs/development/reviews/2026-10-05-001-impl-2026-baseline-revival-review.md` (P1.1, P2.1–P2.8) |
+
+### Post-review fix (2026-10-05) — health memory metric
+
+Railway PR environment smoke (`atp-live-proxy-pr-3`) showed `/api/health` reporting `critical` with "93% memory" on an idle process (the 2026 environment showed 88%). The metric was `heapUsed / heapTotal`; V8 grows `heapTotal` lazily, so that ratio is always high and made `/api/health` permanently `critical`. It now measures `heapUsed` against `v8.getHeapStatistics().heap_size_limit` (`src/utils/heapUsage.js`, tests in `src/tests/heapUsage.test.js`). Thresholds (70% warning / 85% critical) unchanged. Lint clean; 9 suites, 99 passed / 3 skipped.
