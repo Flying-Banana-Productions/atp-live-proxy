@@ -20,7 +20,7 @@ A Node.js proxy server with Express for the ATP (Association of Tennis Professio
 
 ## Prerequisites
 
-- Node.js 16.0.0 or higher
+- Node.js 22 (LTS) or higher (see `.nvmrc`)
 - npm or yarn package manager
 - ATP API Bearer token (unique for each tournament)
 
@@ -75,6 +75,12 @@ LOG_LEVEL=info
 # Example: ALLOWED_ORIGINS=https://yourdomain.com,https://app.yourdomain.com
 ALLOWED_ORIGINS=
 ```
+
+See `env.example` for the complete list of supported variables (WebSocket, events/webhooks, polling back-off, API response logging).
+
+### Freeze mode (end-of-tournament only)
+
+Setting `FILESYSTEM_CACHE_DIR` switches the cache to a write-once filesystem cache that serves each response forever ("data freeze", used after the Nov 2025 tournament together with `WEBSOCKET_ENABLED=false` and `EVENTS_ENABLED=false`). It is **off by default** and must stay unset during a live tournament, otherwise live data will not update. When it is active, the server logs a `FREEZE MODE ACTIVE` warning at startup and `/api/health` reports `"freezeMode": true`, `cache.provider: "filesystem"`, and a warning.
 
 ## Usage
 
@@ -162,7 +168,8 @@ Visit `http://localhost:3000/api-docs` in your browser to access the interactive
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/` | GET | Server information and available endpoints |
-| `/api/health` | GET | Health check endpoint |
+| `/health` | GET | Lightweight liveness check (no rate limit) |
+| `/api/health` | GET | Health check (cache provider, freeze mode, bearer-token configured, memory) |
 | `/api/info` | GET | API information and documentation |
 | `/api/cache/stats` | GET | Cache statistics |
 | `/api/cache/config` | GET | Cache configuration (including TTL values) |

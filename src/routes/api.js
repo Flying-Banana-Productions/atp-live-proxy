@@ -3,6 +3,8 @@ const atpApi = require('../services/atpApi');
 const cacheService = require('../services/cache');
 const { cacheMiddleware } = require('../middleware/cache');
 const config = require('../config');
+const { getRealtimeStatus } = require('../utils/realtimeStatus');
+const { getHeapUsedPercent } = require('../utils/heapUsage');
 
 const router = express.Router();
 
@@ -609,8 +611,7 @@ router.get('/tournaments/:tournamentYear/:tournamentId', cacheMiddleware(), asyn
  */
 router.get('/health', async (req, res) => {
   const cacheStats = await cacheService.getStats();
-  const memUsage = process.memoryUsage();
-  const heapUsedPercent = (memUsage.heapUsed / memUsage.heapTotal) * 100;
+  const heapUsedPercent = getHeapUsedPercent();
   
   // Calculate total keys from both memory and Redis
   const totalKeys = (cacheStats.memory?.keys || 0) + (cacheStats.redis?.keys || 0);
@@ -631,6 +632,26 @@ router.get('/health', async (req, res) => {
     warnings.push('Large number of cache keys');
   }
   
+  // Freeze mode: the write-once filesystem cache (FILESYSTEM_CACHE_DIR) serves
+  // frozen snapshots forever, so live tournament data will not update.
+  const cacheProvider = cacheService.getProviderType();
+  const freezeMode = cacheProvider === 'filesystem';
+  if (freezeMode) {
+    if (status === 'healthy') {
+      status = 'warning';
+    }
+    warnings.push('Freeze mode active (FILESYSTEM_CACHE_DIR is set): serving frozen snapshots, live data will not update');
+  }
+
+  // Realtime pipeline: polling (WebSocket server), event generation, webhook to maple
+  const realtime = getRealtimeStatus(config);
+  if (realtime.warnings.length > 0) {
+    if (status === 'healthy') {
+      status = 'warning';
+    }
+    warnings.push(...realtime.warnings);
+  }
+
   // Check authentication configuration
   const hasBearerToken = !!config.atpApi.bearerToken;
   if (!hasBearerToken) {
@@ -647,7 +668,14 @@ router.get('/health', async (req, res) => {
       configured: hasBearerToken,
       baseUrl: config.atpApi.baseUrl,
     },
+    freezeMode,
+    realtime: {
+      websocket: realtime.websocket,
+      events: realtime.events,
+      webhookConfigured: realtime.webhookConfigured,
+    },
     cache: {
+      provider: cacheProvider,
       ttl: config.cache.ttl,
       checkPeriod: config.cache.checkPeriod,
       keys: totalKeys,

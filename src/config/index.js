@@ -1,5 +1,15 @@
 require('dotenv').config();
 
+/**
+ * Parse LOG_RETENTION_DAYS. An explicit 0 is honoured (keep only today's logs),
+ * as it was before the default moved into config; unset, non-numeric or negative
+ * values fall back to 30 days.
+ */
+function parseRetentionDays(value) {
+  const days = parseInt(value, 10);
+  return Number.isFinite(days) && days >= 0 ? days : 30;
+}
+
 const config = {
   server: {
     port: process.env.PORT || 3000,
@@ -75,7 +85,7 @@ const config = {
     enabled: process.env.ENABLE_API_LOGGING === 'true', // Disabled by default for security
     baseDir: process.env.API_LOG_DIR || './logs/api-responses',
     logAllEndpoints: process.env.LOG_ALL_ENDPOINTS === 'true', // vs just event endpoints
-    retentionDays: parseInt(process.env.LOG_RETENTION_DAYS) || 7,
+    retentionDays: parseRetentionDays(process.env.LOG_RETENTION_DAYS), // default 30, matches apiLogger.cleanup()
     minInterval: parseInt(process.env.API_LOG_MIN_INTERVAL) || 60, // seconds between writes per endpoint
   },
 };

@@ -70,15 +70,33 @@ const options = {
           properties: {
             status: {
               type: 'string',
+              enum: ['healthy', 'warning', 'critical'],
               example: 'healthy',
             },
             version: {
               type: 'string',
               example: '1.0.0',
             },
+            realtime: {
+              type: 'object',
+              description: 'Realtime pipeline switches; any false value adds a warning',
+              properties: {
+                websocket: { type: 'boolean', description: 'WEBSOCKET_ENABLED (background polling runs only when true)' },
+                events: { type: 'boolean', description: 'EVENTS_ENABLED' },
+                webhookConfigured: { type: 'boolean', description: 'EVENTS_WEBHOOK_URL and EVENTS_WEBHOOK_SECRET both set' },
+              },
+            },
+            freezeMode: {
+              type: 'boolean',
+              description: 'True when the write-once filesystem cache (FILESYSTEM_CACHE_DIR) is active and live data will not update',
+            },
             cache: {
               type: 'object',
               properties: {
+                provider: {
+                  type: 'string',
+                  description: 'Active cache provider (memory, redis, filesystem, noop)',
+                },
                 ttl: {
                   type: 'integer',
                   description: 'Cache time-to-live in seconds',

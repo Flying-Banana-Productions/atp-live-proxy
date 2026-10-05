@@ -1,3 +1,8 @@
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "./Dockerfile.production"
+
+[deploy]
+# Liveness endpoint registered before the /api rate limiter; gates traffic swap on deploy
+healthcheckPath = "/health"
+healthcheckTimeout = 60
