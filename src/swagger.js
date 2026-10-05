@@ -70,11 +70,21 @@ const options = {
           properties: {
             status: {
               type: 'string',
+              enum: ['healthy', 'warning', 'critical'],
               example: 'healthy',
             },
             version: {
               type: 'string',
               example: '1.0.0',
+            },
+            realtime: {
+              type: 'object',
+              description: 'Realtime pipeline switches; any false value adds a warning',
+              properties: {
+                websocket: { type: 'boolean', description: 'WEBSOCKET_ENABLED (background polling runs only when true)' },
+                events: { type: 'boolean', description: 'EVENTS_ENABLED' },
+                webhookConfigured: { type: 'boolean', description: 'EVENTS_WEBHOOK_URL and EVENTS_WEBHOOK_SECRET both set' },
+              },
             },
             freezeMode: {
               type: 'boolean',

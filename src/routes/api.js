@@ -3,6 +3,7 @@ const atpApi = require('../services/atpApi');
 const cacheService = require('../services/cache');
 const { cacheMiddleware } = require('../middleware/cache');
 const config = require('../config');
+const { getRealtimeStatus } = require('../utils/realtimeStatus');
 
 const router = express.Router();
 
@@ -642,6 +643,15 @@ router.get('/health', async (req, res) => {
     warnings.push('Freeze mode active (FILESYSTEM_CACHE_DIR is set): serving frozen snapshots, live data will not update');
   }
 
+  // Realtime pipeline: polling (WebSocket server), event generation, webhook to maple
+  const realtime = getRealtimeStatus(config);
+  if (realtime.warnings.length > 0) {
+    if (status === 'healthy') {
+      status = 'warning';
+    }
+    warnings.push(...realtime.warnings);
+  }
+
   // Check authentication configuration
   const hasBearerToken = !!config.atpApi.bearerToken;
   if (!hasBearerToken) {
@@ -659,6 +669,11 @@ router.get('/health', async (req, res) => {
       baseUrl: config.atpApi.baseUrl,
     },
     freezeMode,
+    realtime: {
+      websocket: realtime.websocket,
+      events: realtime.events,
+      webhookConfigured: realtime.webhookConfigured,
+    },
     cache: {
       provider: cacheProvider,
       ttl: config.cache.ttl,

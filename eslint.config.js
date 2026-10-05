@@ -23,6 +23,9 @@ module.exports = [
       'linebreak-style': ['error', 'unix'],
       'quotes': ['error', 'single'],
       'semi': ['error', 'always'],
+      // Dropped from eslint:recommended in ESLint 9; re-added for parity with the ESLint 8 config
+      'no-extra-semi': 'error',
+      'no-mixed-spaces-and-tabs': 'error',
       // ESLint 9 changed the default of caughtErrors from 'none' to 'all';
       // keep the ESLint 8 behaviour so unused `catch (e)` bindings are allowed.
       'no-unused-vars': ['error', { argsIgnorePattern: '^_', caughtErrors: 'none' }],
