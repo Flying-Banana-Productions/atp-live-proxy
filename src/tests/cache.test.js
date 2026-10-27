@@ -28,12 +28,12 @@ describe('Cache Configuration', () => {
 
     it('should return correct TTL for h2h/match endpoint', () => {
       const ttl = getEndpointTtl('/api/h2h/match/12345');
-      expect(ttl).toBe(10);
+      expect(ttl).toBe(3600); // 1 hour
     });
 
     it('should return correct TTL for h2h endpoint', () => {
       const ttl = getEndpointTtl('/api/h2h/12345/67890');
-      expect(ttl).toBe(10);
+      expect(ttl).toBe(3600); // 1 hour
     });
 
     it('should return correct TTL for results endpoint', () => {
@@ -86,14 +86,60 @@ describe('Cache Configuration', () => {
       // Verify specific endpoint TTL values
       expect(response.body.endpoints['/api/live-matches']).toBe(10);
       expect(response.body.endpoints['/api/match-stats']).toBe(10);
-      expect(response.body.endpoints['/api/h2h/match']).toBe(10);
-      expect(response.body.endpoints['/api/h2h']).toBe(10);
+      expect(response.body.endpoints['/api/h2h/match']).toBe(3600); // 1 hour
+      expect(response.body.endpoints['/api/h2h']).toBe(3600); // 1 hour
       expect(response.body.endpoints['/api/results']).toBe(180);
       expect(response.body.endpoints['/api/player-list']).toBe(600);
       expect(response.body.endpoints['/api/draws']).toBe(180); // 3 minutes
       expect(response.body.endpoints['/api/draws/live']).toBe(300); // 5 minutes
       expect(response.body.endpoints['/api/schedules']).toBe(600);
       expect(response.body.endpoints['/api/team-cup-rankings']).toBe(600);
+    });
+  });
+
+  describe('H2H OpenAPI documentation', () => {
+    // Resolves a $ref like '#/components/schemas/H2HSummary' against the generated document
+    const resolve = (doc, schema) => {
+      if (!schema.$ref) return schema;
+      return schema.$ref
+        .replace(/^#\//, '')
+        .split('/')
+        .reduce((node, key) => node[key], doc);
+    };
+
+    it.each([
+      '/api/h2h/match/{matchId}',
+      '/api/h2h/{playerId}/{opponentId}',
+    ])('documents the 200 response of %s as a cache envelope of H2H data', async (route) => {
+      const response = await request(app)
+        .get('/api-docs/swagger.json')
+        .expect(200);
+      const doc = response.body;
+
+      const envelope = resolve(doc, doc.paths[route].get.responses['200'].content['application/json'].schema);
+      expect(Object.keys(envelope.properties)).toEqual(
+        expect.arrayContaining(['data', 'cached', 'timestamp', 'ttl'])
+      );
+
+      const data = resolve(doc, envelope.properties.data);
+      expect(data).toBe(doc.components.schemas.H2HSummary);
+      expect(resolve(doc, data.properties.Player)).toBe(doc.components.schemas.H2HPlayer);
+      expect(resolve(doc, data.properties.Partner.allOf[0])).toBe(doc.components.schemas.H2HPlayer);
+      expect(data.properties.Partner.nullable).toBe(true);
+      expect(resolve(doc, data.properties.CountableTournaments.items)).toBe(doc.components.schemas.H2HMeeting);
+      expect(resolve(doc, data.properties.NonCountableTournaments.items)).toBe(doc.components.schemas.H2HMeeting);
+      expect(doc.components.schemas.H2HPlayer.properties).toHaveProperty('H2HWins');
+      expect(doc.components.schemas.H2HMeeting.properties).toHaveProperty('ResultString');
+    });
+
+    it('leaves the shared CacheResponse data untyped for other routes', async () => {
+      const response = await request(app)
+        .get('/api-docs/swagger.json')
+        .expect(200);
+
+      const { data } = response.body.components.schemas.CacheResponse.properties;
+      expect(data.$ref).toBeUndefined();
+      expect(data.type).toBe('object');
     });
   });
 

@@ -29,8 +29,6 @@ const config = {
       // Live data - short cache times
       '/api/live-matches': 10,
       '/api/match-stats': 10,
-      '/api/h2h/match': 10,
-      '/api/h2h': 10, // H2H by player IDs
 
       // Results - medium cache time
       '/api/results': 180, // 3 minutes
@@ -42,6 +40,8 @@ const config = {
       '/api/schedules': 600, // 10 minutes
       '/api/team-cup-rankings': 600, // 10 minutes
       '/api/tournaments': 3600, // 1 hour (tournament info changes rarely)
+      '/api/h2h/match': 3600, // 1 hour (bios and meeting history don't change during a match)
+      '/api/h2h': 3600, // 1 hour, H2H by player IDs
     },
   },
   filesystem: {
