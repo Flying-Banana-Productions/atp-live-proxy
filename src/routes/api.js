@@ -116,7 +116,7 @@ router.get('/draws', cacheMiddleware(), async (req, res, next) => {
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/CacheResponse'
+ *               $ref: '#/components/schemas/H2HCacheResponse'
  *       401:
  *         description: Not authorized
  *         content:
@@ -166,7 +166,7 @@ router.get('/h2h/match/:matchId', cacheMiddleware(), async (req, res, next) => {
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/CacheResponse'
+ *               $ref: '#/components/schemas/H2HCacheResponse'
  *       401:
  *         description: Not authorized
  *         content:
