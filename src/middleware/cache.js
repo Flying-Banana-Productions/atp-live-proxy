@@ -40,7 +40,9 @@ function cacheMiddleware(ttl = null) {
   return async (req, res, next) => {
     if (req.method !== 'GET') return next();
 
-    const cacheKey = cacheService.generateKey(req.path, req.query);
+    // Keyed on the path alone: the routes don't forward query strings to ATP, so a query
+    // (e.g. a ?t= cache-buster) must not create a separate, uncached entry
+    const cacheKey = cacheService.generateKey(req.path);
     const cachedData = await cacheService.get(cacheKey);
 
     if (cachedData) {
