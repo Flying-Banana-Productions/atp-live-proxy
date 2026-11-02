@@ -192,15 +192,41 @@ describe('Schedules API', () => {
       expect(response.body.data).toEqual({ DailySchedule: 'not-an-array' });
     });
 
-    it('should pass query parameters to ATP API', async () => {
+    it('should not forward client query parameters to ATP API', async () => {
       await request(app)
         .get('/api/schedules/date/2025-10-30?tournamentId=123&round=QF')
         .expect(200);
 
-      expect(atpApi.getSchedule).toHaveBeenCalledWith({
-        tournamentId: '123',
-        round: 'QF'
-      });
+      expect(atpApi.getSchedule).toHaveBeenCalledWith();
+    });
+
+    it('should serve a cache-busting query from the same cache entry', async () => {
+      atpApi.getSchedule.mockResolvedValue({ DailySchedule: [] });
+
+      await request(app).get('/api/schedules?t=1793561430001').expect(200);
+      const second = await request(app).get('/api/schedules?t=1793561499999').expect(200);
+      const third = await request(app).get('/api/schedules').expect(200);
+
+      expect(atpApi.getSchedule).toHaveBeenCalledTimes(1);
+      expect(second.body.cached).toBe(true);
+      expect(third.body.cached).toBe(true);
+    });
+
+    it('should serve data the polling service cached under the full /api path', async () => {
+      const polled = { DailySchedule: [{ IsoDate: '2026-11-09' }] };
+      await cacheService.set(cacheService.generateKey('/api/schedules'), polled, 60);
+
+      const response = await request(app).get('/api/schedules').expect(200);
+
+      expect(atpApi.getSchedule).not.toHaveBeenCalled();
+      expect(response.body.cached).toBe(true);
+      expect(response.body.data).toEqual(polled);
+    });
+
+    it('should not route a differently-cased path to ATP', async () => {
+      await request(app).get('/api/ScHeDuLeS').expect(404);
+
+      expect(atpApi.getSchedule).not.toHaveBeenCalled();
     });
   });
 });

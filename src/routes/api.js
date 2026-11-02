@@ -6,7 +6,9 @@ const config = require('../config');
 const { getRealtimeStatus } = require('../utils/realtimeStatus');
 const { getHeapUsedPercent } = require('../utils/heapUsage');
 
-const router = express.Router();
+// Case-sensitive so /api/DrAwS/live is a 404 rather than an uncached copy of /api/draws/live.
+// Client query strings are never forwarded to ATP or used in cache keys (see middleware/cache.js).
+const router = express.Router({ caseSensitive: true });
 
 // ===== DRAWS ENDPOINTS =====
 
@@ -45,7 +47,7 @@ const router = express.Router();
  */
 router.get('/draws/live', cacheMiddleware(), async (req, res, next) => {
   try {
-    const data = await atpApi.getLiveDraw(req.query);
+    const data = await atpApi.getLiveDraw();
     res.json(data);
   } catch (error) {
     next(error);
@@ -87,7 +89,7 @@ router.get('/draws/live', cacheMiddleware(), async (req, res, next) => {
  */
 router.get('/draws', cacheMiddleware(), async (req, res, next) => {
   try {
-    const data = await atpApi.getDraw(req.query);
+    const data = await atpApi.getDraw();
     res.json(data);
   } catch (error) {
     next(error);
@@ -133,7 +135,7 @@ router.get('/draws', cacheMiddleware(), async (req, res, next) => {
 router.get('/h2h/match/:matchId', cacheMiddleware(), async (req, res, next) => {
   try {
     const { matchId } = req.params;
-    const data = await atpApi.getH2HByMatch(matchId, req.query);
+    const data = await atpApi.getH2HByMatch(matchId);
     res.json(data);
   } catch (error) {
     next(error);
@@ -183,7 +185,7 @@ router.get('/h2h/match/:matchId', cacheMiddleware(), async (req, res, next) => {
 router.get('/h2h/:playerId/:opponentId', cacheMiddleware(), async (req, res, next) => {
   try {
     const { playerId, opponentId } = req.params;
-    const data = await atpApi.getH2HByPlayers(playerId, opponentId, req.query);
+    const data = await atpApi.getH2HByPlayers(playerId, opponentId);
     res.json(data);
   } catch (error) {
     next(error);
@@ -221,7 +223,7 @@ router.get('/h2h/:playerId/:opponentId', cacheMiddleware(), async (req, res, nex
  */
 router.get('/live-matches', cacheMiddleware(), async (req, res, next) => {
   try {
-    const data = await atpApi.getLiveMatches(req.query);
+    const data = await atpApi.getLiveMatches();
     res.json(data);
   } catch (error) {
     next(error);
@@ -273,7 +275,7 @@ router.get('/live-matches', cacheMiddleware(), async (req, res, next) => {
 router.get('/match-stats/:matchId', cacheMiddleware(), async (req, res, next) => {
   try {
     const { matchId } = req.params;
-    const data = await atpApi.getMatchStats(matchId, req.query);
+    const data = await atpApi.getMatchStats(matchId);
     res.json(data);
   } catch (error) {
     next(error);
@@ -317,7 +319,7 @@ router.get('/match-stats/:matchId', cacheMiddleware(), async (req, res, next) =>
  */
 router.get('/player-list', cacheMiddleware(), async (req, res, next) => {
   try {
-    const data = await atpApi.getPlayerList(req.query);
+    const data = await atpApi.getPlayerList();
     res.json(data);
   } catch (error) {
     next(error);
@@ -361,7 +363,7 @@ router.get('/player-list', cacheMiddleware(), async (req, res, next) => {
  */
 router.get('/results', cacheMiddleware(), async (req, res, next) => {
   try {
-    const data = await atpApi.getResults(req.query);
+    const data = await atpApi.getResults();
     res.json(data);
   } catch (error) {
     next(error);
@@ -405,7 +407,7 @@ router.get('/results', cacheMiddleware(), async (req, res, next) => {
  */
 router.get('/schedules', cacheMiddleware(), async (req, res, next) => {
   try {
-    const data = await atpApi.getSchedule(req.query);
+    const data = await atpApi.getSchedule();
     res.json(data);
   } catch (error) {
     next(error);
@@ -484,7 +486,7 @@ router.get('/schedules/date/:date', cacheMiddleware(), async (req, res, next) =>
     }
 
     // Fetch full schedule from ATP API
-    const fullSchedule = await atpApi.getSchedule(req.query);
+    const fullSchedule = await atpApi.getSchedule();
 
     // Filter DailySchedule array by IsoDate field
     if (fullSchedule && fullSchedule.DailySchedule && Array.isArray(fullSchedule.DailySchedule)) {
@@ -514,13 +516,6 @@ router.get('/schedules/date/:date', cacheMiddleware(), async (req, res, next) =>
  *     summary: Get ATP Cup team rankings
  *     description: Get the ATP Cup team rankings
  *     tags: [TeamCupRankings]
- *     parameters:
- *       - in: query
- *         name: rankDate
- *         schema:
- *           type: string
- *           format: date-time
- *         description: The desired ranking date. If null, the latest ranking date will be used.
  *     responses:
  *       200:
  *         description: Team cup rankings retrieved successfully
@@ -531,7 +526,7 @@ router.get('/schedules/date/:date', cacheMiddleware(), async (req, res, next) =>
  */
 router.get('/team-cup-rankings', cacheMiddleware(), async (req, res, next) => {
   try {
-    const data = await atpApi.getTeamCupRankings(req.query);
+    const data = await atpApi.getTeamCupRankings();
     res.json(data);
   } catch (error) {
     next(error);
@@ -585,7 +580,7 @@ router.get('/team-cup-rankings', cacheMiddleware(), async (req, res, next) => {
 router.get('/tournaments/:tournamentYear/:tournamentId', cacheMiddleware(), async (req, res, next) => {
   try {
     const { tournamentYear, tournamentId } = req.params;
-    const data = await atpApi.getTournament(tournamentYear, tournamentId, req.query);
+    const data = await atpApi.getTournament(tournamentYear, tournamentId);
     res.json(data);
   } catch (error) {
     next(error);
