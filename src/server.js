@@ -1,5 +1,4 @@
 const express = require('express');
-const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const compression = require('compression');
@@ -11,6 +10,7 @@ const config = require('./config');
 const apiRoutes = require('./routes/api');
 const cacheRoutes = require('./routes/cache');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
+const { createCorsMiddleware, parseAllowedOrigins } = require('./middleware/cors');
 const webSocketServer = require('./websocket');
 const { getRealtimeStatus } = require('./utils/realtimeStatus');
 
@@ -35,43 +35,11 @@ app.use(helmet());
 // Trust proxy configuration (must be before rate limiting)
 app.set('trust proxy', config.server.trustProxy);
 
-// CORS middleware
-const corsOptions = {
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-};
-
-if (process.env.NODE_ENV === 'production') {
-  // Allow specific origins in production
-  const allowedOrigins = process.env.ALLOWED_ORIGINS 
-    ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
-    : [
-      'http://localhost:3000',
-      'http://localhost:3001',
-      'http://localhost:8080',
-      'http://127.0.0.1:3000',
-      'http://127.0.0.1:3001',
-      'http://127.0.0.1:8080'
-    ];
-  
-  corsOptions.origin = function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      console.log(`CORS blocked origin: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
-    }
-  };
-} else {
-  // Allow all origins in development
-  corsOptions.origin = true;
-}
-
-app.use(cors(corsOptions));
+// CORS middleware: all origins in development; the ALLOWED_ORIGINS list in production
+app.use(createCorsMiddleware({
+  production: process.env.NODE_ENV === 'production',
+  allowedOrigins: parseAllowedOrigins(process.env.ALLOWED_ORIGINS),
+}));
 
 // Compression middleware
 app.use(compression());

@@ -7,6 +7,21 @@ const apiLogger = require('./apiLogger');
 const config = require('../config');
 
 /**
+ * Endpoints that can be polled, mapped to the ATP API method that fetches them.
+ * Only parameterless endpoints belong here: the H2H and match-stats endpoints need a
+ * match or player ID, so they're served on request (and cached) but never polled.
+ */
+const POLLABLE_ENDPOINTS = {
+  '/api/live-matches': () => atpApi.getLiveMatches(),
+  '/api/draws/live': () => atpApi.getLiveDraw(),
+  '/api/draws': () => atpApi.getDraw(),
+  '/api/player-list': () => atpApi.getPlayerList(),
+  '/api/results': () => atpApi.getResults(),
+  '/api/schedules': () => atpApi.getSchedule(),
+  '/api/team-cup-rankings': () => atpApi.getTeamCupRankings(),
+};
+
+/**
  * Background polling service for WebSocket updates and event generation
  * Fetches data from ATP API at configured TTL intervals
  * and broadcasts updates to subscribed clients while generating events
@@ -280,30 +295,25 @@ class PollingService {
   }
 
   /**
+   * Whether an endpoint can be polled (and so subscribed to over the websocket)
+   * @param {string} endpoint - API endpoint path
+   * @returns {boolean}
+   */
+  isPollable(endpoint) {
+    return Object.prototype.hasOwnProperty.call(POLLABLE_ENDPOINTS, endpoint);
+  }
+
+  /**
    * Fetch data for a specific endpoint
    * @param {string} endpoint - API endpoint path
    * @returns {Object} API response with status { data, status }
    */
   async fetchEndpointData(endpoint) {
-    // Map endpoint paths to ATP API methods
-    const endpointMap = {
-      '/api/live-matches': () => atpApi.getLiveMatches(),
-      '/api/draws/live': () => atpApi.getLiveDraw(),
-      '/api/draws': () => atpApi.getDraws(),
-      '/api/h2h/match': () => atpApi.getH2HByMatch(), // This needs matchId parameter
-      '/api/h2h': () => atpApi.getH2H(), // This needs playerId and opponentId parameters
-      '/api/match-stats': () => atpApi.getMatchStats(), // This needs matchId parameter
-      '/api/player-list': () => atpApi.getPlayerList(),
-      '/api/results': () => atpApi.getResults(),
-      '/api/schedules': () => atpApi.getSchedule(),
-      '/api/team-cup-rankings': () => atpApi.getTeamCupRankings(),
-    };
-
-    const apiMethod = endpointMap[endpoint];
-    if (!apiMethod) {
+    if (!this.isPollable(endpoint)) {
       console.warn(`[POLLING] No API method found for endpoint: ${endpoint}`);
       return null;
     }
+    const apiMethod = POLLABLE_ENDPOINTS[endpoint];
 
     try {
       const data = await apiMethod();
