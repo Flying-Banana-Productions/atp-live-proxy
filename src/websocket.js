@@ -176,12 +176,22 @@ class WebSocketServer {
    * @param {Object} socket - Socket instance
    * @param {string} endpoint - Endpoint path
    */
-  sendCachedData(socket, endpoint) {
+  async sendCachedData(socket, endpoint) {
     const cacheKey = cacheService.generateKey(endpoint);
-    const cachedData = cacheService.get(cacheKey);
-    
+    let cachedData;
+    let remainingTtl;
+    try {
+      cachedData = await cacheService.get(cacheKey);
+      if (cachedData) {
+        remainingTtl = await cacheService.getTtl(cacheKey);
+      }
+    } catch (error) {
+      // Treat a cache failure as a miss; the next poll will push fresh data
+      console.error(`[WEBSOCKET] Error reading cache for ${endpoint}:`, error.message);
+      cachedData = null;
+    }
+
     if (cachedData) {
-      const remainingTtl = cacheService.getTtl(cacheKey);
       const response = {
         data: cachedData,
         cached: true,
@@ -212,17 +222,8 @@ class WebSocketServer {
    * @returns {boolean} True if valid
    */
   isValidEndpoint(endpoint) {
-    const validEndpoints = [
-      '/api/live-matches',
-      '/api/draws/live',
-      '/api/draws',
-      '/api/player-list',
-      '/api/results',
-      '/api/schedules',
-      '/api/team-cup-rankings'
-    ];
-    
-    return validEndpoints.includes(endpoint);
+    // Subscriptions are served by polling, so only pollable endpoints can be subscribed to
+    return pollingService.isPollable(endpoint);
   }
 
   /**
